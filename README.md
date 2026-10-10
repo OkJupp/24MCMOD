@@ -56,6 +56,18 @@ Unter `variation`: `sizeMin` / `sizeMax` (Größenbereich der Ketten), `giantCha
 
 Unter `motion`: `windStrength` / `windSpeed` (gemeinsame, weiche Windböen für alle Ketten), `torsionDegrees` / `torsionSpeed` (Ketten drehen sich langsam um sich selbst), `emberPulse` (wie stark die glühenden Bruchkanten pulsieren), `waveDegrees` / `waveLength` / `wavePeriod` (leichte Welle, die wie bei einer Peitsche von oben nach unten durch die Kette läuft: Stärke, Länge in Gliedern, Sekunden pro Welle). Alles läuft nur über die Zeit – Spieler in der Nähe verändern nichts.
 
+Unter `energy` (Animationen wie beim Vorbild, rein über die Zeit, Spieler verändern nichts):
+
+| Wert | Bedeutung | Standard |
+|---|---|---|
+| `flow` | Stärke der Energie-Stöße, die leuchtend von oben nach unten durch die Kette fließen (0 = aus) | 1 |
+| `flowSpeed` / `flowInterval` | Tempo der Stöße (1 = etwa 3 Glieder pro Sekunde) / Sekunden zwischen zwei Stößen | 1 / 6 |
+| `shimmer` | Wie lebendig die leuchtenden Adern über die Glieder kriechen und wabern (0 = stillstehend) | 1 |
+| `arcs` | Stärke der elektrischen Bögen, die aus den Ketten zucken – das Glied leuchtet dabei auf (0 = aus) | 1 |
+| `arcInterval` | Durchschnittliche Sekunden zwischen zwei Bögen an derselben Kette | 9 |
+| `arcLength` | Länge der Bögen (1 = normal) | 1 |
+| `sparks` | Funken, die bei jedem Bogen wegfliegen und verglühen | 7 |
+
 Weitere Schalter: `hideClouds` (Vanilla-Wolken **und** die LOD-Wolken von Distant Horizons aus, Standard `true` – deine DH-Einstellungsdatei bleibt dabei unverändert), `nearDistance` (bis zu dieser Entfernung sind Ketten echte 3D-Objekte in der Welt, Standard 220).
 
 `glow` = Stärke des Leuchtens um die Ketten (0 = aus, Standard 0.45; leuchtet bei Blitzen kurz mit auf). `tint` färbt die Ketten ein, z. B. `{ "red": 1, "green": 0.6, "blue": 0.9 }`.

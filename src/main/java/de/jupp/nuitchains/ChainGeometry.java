@@ -34,6 +34,7 @@ public final class ChainGeometry {
     private final DamageSettings dmg;
     private final VariationSettings var;
     private final MotionSettings mot;
+    private final EnergySettings en;
     private final LinkMesh meshNear;
     private final LinkMesh meshMid;
     private final LinkMesh meshFar;
@@ -55,7 +56,13 @@ public final class ChainGeometry {
 
     public ChainGeometry(ChainSettings settings, DamageSettings damage, VariationSettings variation, MotionSettings motion,
                          float glowStrength, StyleSettings style) {
+        this(settings, damage, variation, motion, glowStrength, style, EnergySettings.DEFAULT);
+    }
+
+    public ChainGeometry(ChainSettings settings, DamageSettings damage, VariationSettings variation, MotionSettings motion,
+                         float glowStrength, StyleSettings style, EnergySettings energy) {
         this.glowStrength = glowStrength;
+        this.en = energy;
         this.s = settings;
         this.dmg = damage;
         this.var = variation;
@@ -204,6 +211,9 @@ public final class ChainGeometry {
         double scale = 1; // Größe des Glieds
         double pulse = 1; // Glühen der Bruchkanten (pulsiert)
         double energy;    // Stärke der Energie-Adern (0..1)
+        double flow;      // Energie-Stoß, der gerade durch dieses Glied fließt (0..~1.5)
+        double flare;     // Aufleuchten durch einen elektrischen Bogen (0..~1)
+        double veinPhase; // wie weit die Adern gerade "gewabert" sind
         float alpha;      // grobe Deckkraft des ganzen Teils (zum Überspringen)
         double topRelY;   // Aufhängehöhe relativ zur Kamera (für weiches Ausblenden pro Ecke)
         double fadeLen;   // Länge des Ausblendens
@@ -264,10 +274,23 @@ public final class ChainGeometry {
             this.glowX = new double[c.links() * 2 + 2]; this.glowY = new double[c.links() * 2 + 2];
             this.glowZ = new double[c.links() * 2 + 2]; this.glowA = new double[c.links() * 2 + 2];
         }
-        this.glowX[0] = c.ax() - ex; this.glowY[0] = c.ay() - ey; this.glowZ[0] = c.az() - ez; this.glowA[0] = 0;
+        if (this.glowB.length < this.glowX.length) this.glowB = new double[this.glowX.length];
+        this.glowX[0] = c.ax() - ex; this.glowY[0] = c.ay() - ey; this.glowZ[0] = c.az() - ez; this.glowA[0] = 0; this.glowB[0] = 0;
 
         int nLinks = c.links();
         int nParts = 0;
+        // Elektrische Bögen: nur an gut sichtbaren Gliedern (nicht im ausgeblendeten oberen Teil)
+        int arcMin = (int) Math.ceil(topFade * 0.6 / pitch);
+        int arcMax = c.broken() ? nLinks - 1 - (int) Math.ceil(c.brokenLinks() * 0.5) : nLinks - 1;
+        findArcs(c, timeSec, arcMin, arcMax);
+        // Energie-Stöße: wandern von der Aufhängung nach unten
+        double flowSpeed = 3.0 * en.flowSpeed() / Math.sqrt(scale);            // Glieder pro Sekunde
+        double flowEvery = en.flowInterval();
+        double flowTravel = (nLinks + 6) / flowSpeed;
+        long flowLast = (long) Math.floor(timeSec / flowEvery);
+        long flowFirst = (long) Math.floor((timeSec - flowTravel) / flowEvery) - 1;
+        if (flowLast - flowFirst > 12) flowFirst = flowLast - 12;
+        double veinSpeed = 0.32 * en.shimmer();
         double px = c.ax(), py = c.ay(), pz = c.az();
         double lastUx = 0, lastUy = -1, lastUz = 0;
         for (int i = 0; i < nLinks; i++) {
@@ -341,6 +364,22 @@ public final class ChainGeometry {
             // Energie-Adern: überall ein wenig, zum (zerfallenden) Ende hin deutlich mehr
             double nearEnd = smooth(0.45, 1.0, f) * (c.broken() ? 1.0 : 0.5);
             p.energy = dmg.veins() * (0.25 + 0.75 * nearEnd) * (0.6 + 0.4 * rnd(p.seed, 7));
+            // Adern wabern langsam; der Zustand wandert dabei sichtbar die Kette hinunter
+            p.veinPhase = veinSpeed * timeSec - 0.45 * Math.min(1, en.shimmer()) * i + rnd(c.hash(), 500) * 6.283;
+            // Energie-Stöße, die gerade durch dieses Glied laufen
+            double flow = 0;
+            if (en.flow() > 0) {
+                for (long n = flowFirst; n <= flowLast; n++) {
+                    long hn = mix(c.hash() ^ 0xF10F10F1L ^ (n * 0xD1B54A32D192ED03L));
+                    if (rnd(hn, 0) < 0.2) continue;                     // manchmal kommt keiner
+                    double t0 = (n + rnd(hn, 1) * 0.7) * flowEvery;
+                    double front = (timeSec - t0) * flowSpeed - 2.0;     // startet oberhalb der Aufhängung
+                    double dl = (i - front) / 1.6;
+                    if (dl > -4 && dl < 4) flow += (0.7 + 0.3 * rnd(hn, 2)) * Math.exp(-dl * dl);
+                }
+            }
+            p.flow = flow * en.flow();
+            p.flare = arcFlare(i);
             // oben langsam aus dem Nichts einblenden (pro Ecke, siehe LinkMesh.emit)
             p.topRelY = topRelY;
             p.fadeLen = topFade;
@@ -351,7 +390,10 @@ public final class ChainGeometry {
             double endFade = c.broken()
                     ? 1 - smooth(nLinks - c.brokenLinks() - 1.5, nLinks - c.brokenLinks() * 0.4, i + 1)
                     : 1 - smooth(nLinks - 2.5, nLinks, i + 1);
-            this.glowA[i + 1] = topAlpha(topRelY - (py - ey), topFade) * endFade * (1 + 0.9 * Math.min(1, damage * 1.5));
+            float jointAlpha = topAlpha(topRelY - (py - ey), topFade);
+            this.glowA[i + 1] = jointAlpha * endFade * (1 + 0.9 * Math.min(1, damage * 1.5));
+            // Energie-Stöße und Bögen lassen das Leuchten aufflammen
+            this.glowB[i + 1] = jointAlpha * endFade * (1.15 * Math.min(1.5, p.flow) + 2.2 * p.flare);
         }
 
         // Kristall-Splitter unter einem zerfallenden Ende
@@ -383,6 +425,8 @@ public final class ChainGeometry {
                 p.seed = fh;
                 p.damage = 0;
                 p.energy = 0;
+                p.flow = 0;
+                p.flare = 0;
                 p.hit = false;
                 p.alpha = 1F;
                 p.topRelY = topRelY;
@@ -390,6 +434,9 @@ public final class ChainGeometry {
                 p.shardAlpha = (float) (smooth(0, 0.08, age) * smooth(0, 0.25, 1 - age));
             }
         }
+
+        // Elektrische Bögen: zuckende Bänder (ins Leuchten) und Funken (als winzige Splitter)
+        nParts = emitArcs(c, nParts, scale, pitch, topRelY, topFade, glowSink);
 
         if (this.partOrder.length < nParts) this.partOrder = new long[nParts * 2];
         for (int i = 0; i < nParts; i++) {
@@ -422,6 +469,7 @@ public final class ChainGeometry {
     // ------------------------------------------------------------------ Leuchten um die Kette
 
     private double[] glowX = new double[64], glowY = new double[64], glowZ = new double[64], glowA = new double[64];
+    private double[] glowB = new double[64];   // zusätzliches Aufflammen (Energie-Stöße, Bögen)
     private final float[] gxyz = new float[12];
     private final float[] guv = new float[8];
     private final float[] galpha = new float[4];
@@ -440,7 +488,7 @@ public final class ChainGeometry {
             double sl = Math.sqrt(sx * sx + sy * sy + sz * sz);
             if (sl < 1e-6) { sx = 1; sy = 0; sz = 0; sl = 1; }
             sx *= hw / sl; sy *= hw / sl; sz *= hw / sl;
-            float al = (float) (Math.min(1.0, glowA[i]) * this.glowStrength);
+            float al = (float) Math.min(1.0, (Math.min(1.0, glowA[i]) + glowB[i]) * this.glowStrength);
             if (i > 0 && (al > 0.003F || prevA > 0.003F)) {
                 put4(gxyz, 0, prevLx, prevLy, prevLz); put4(gxyz, 1, x - sx, y - sy, z - sz);
                 put4(gxyz, 2, x + sx, y + sy, z + sz); put4(gxyz, 3, prevRx, prevRy, prevRz);
@@ -450,6 +498,228 @@ public final class ChainGeometry {
             }
             prevLx = x - sx; prevLy = y - sy; prevLz = z - sz;
             prevRx = x + sx; prevRy = y + sy; prevRz = z + sz;
+            prevA = al;
+        }
+    }
+
+    // ------------------------------------------------------------------ Elektrische Bögen
+
+    private static final int MAX_ARCS = 3;
+    private final long[] arcH = new long[MAX_ARCS];
+    private final double[] arcAge = new double[MAX_ARCS], arcI = new double[MAX_ARCS], arcDur = new double[MAX_ARCS];
+    private final int[] arcA = new int[MAX_ARCS], arcB = new int[MAX_ARCS];
+    private final long[] arcFrame = new long[MAX_ARCS];
+    private int arcCount;
+
+    /**
+     * Welche Bögen gerade an dieser Kette zucken. Rein aus der Zeit abgeleitet: jede Kette hat ihren
+     * eigenen Takt, im Schnitt alle {@code arcInterval} Sekunden ein Bogen.
+     */
+    private void findArcs(Chain c, double timeSec, int iMin, int iMax) {
+        this.arcCount = 0;
+        if (en.arcs() <= 0 || iMax < iMin) return;
+        double every = en.arcInterval();
+        long epoch = (long) Math.floor(timeSec / every);
+        for (long e = epoch - 1; e <= epoch && this.arcCount < MAX_ARCS; e++) {
+            long h = mix(c.hash() ^ 0xA2C5A2C5L ^ (e * 0xD1B54A32D192ED03L));
+            if (rnd(h, 0) < 0.3) continue;                              // manche Abschnitte bleiben ruhig
+            double age = timeSec - (e + rnd(h, 1) * 0.8) * every;
+            double dur = 0.4 + 0.5 * rnd(h, 2);
+            if (age < 0 || age > dur + 1.3) continue;                   // + Zeit, in der Funken noch fliegen
+            double env = smooth(0, 0.02, age) * (1 - smooth(dur * 0.45, dur, age));
+            long frame = (long) Math.floor(age / 0.07);                  // knistert ~14x pro Sekunde
+            double flick = 0.5 + 0.5 * rnd(h, 300 + (int) (frame & 1023));
+            // gelegentlich ein zweiter, kräftiger Schlag mitten im Bogen
+            double restrike = Math.exp(-Math.max(0, age - dur * (0.3 + 0.3 * rnd(h, 9))) / 0.05);
+            if (age < dur * 0.3) restrike = 0;
+            int a = iMin + (int) Math.min(iMax - iMin, Math.floor(rnd(h, 3) * (iMax - iMin + 1)));
+            int b = a;
+            if (rnd(h, 4) < 0.4) b = Math.min(iMax, a + 2 + (int) (rnd(h, 5) * 3));  // kriecht an der Kette entlang
+            int k = this.arcCount++;
+            this.arcH[k] = h;
+            this.arcAge[k] = age;
+            this.arcDur[k] = dur;
+            this.arcI[k] = en.arcs() * Math.min(1.3, env * flick + 0.6 * restrike * env);
+            this.arcA[k] = a;
+            this.arcB[k] = b;
+            this.arcFrame[k] = frame;
+        }
+    }
+
+    /** Wie stark Glied {@code i} gerade durch Bögen aufleuchtet. */
+    private double arcFlare(int i) {
+        double f = 0;
+        for (int k = 0; k < this.arcCount; k++) {
+            int a = this.arcA[k], b = this.arcB[k];
+            double dist = i < a ? a - i : i > b ? i - b : 0;
+            double w = b > a ? 0.85 * Math.max(0, 1 - dist / 1.4) : Math.max(0, 1 - dist / 1.6);
+            f = Math.max(f, this.arcI[k] * w);
+        }
+        return f;
+    }
+
+    private final ArrayList<double[]> arcPts = new ArrayList<>();
+    private final ArrayList<double[]> arcTmp = new ArrayList<>();
+    private final ArrayList<double[]> arcBranch = new ArrayList<>();
+
+    /** Erzeugt Bänder (ins Leuchten) und Funken (als Teile) aller aktiven Bögen; gibt die neue Teile-Anzahl zurück. */
+    private int emitArcs(Chain c, int nParts, double scale, double pitch, double topRelY, double topFade, QuadSink glowSink) {
+        for (int k = 0; k < this.arcCount; k++) {
+            long h = this.arcH[k];
+            Part pa = this.parts.get(this.arcA[k]);
+            // Austrittsseite: irgendwo rund um das Glied
+            double th = rnd(h, 6) * Math.PI * 2;
+            double ox = Math.cos(th) * pa.wx + Math.sin(th) * pa.nx;
+            double oy = Math.cos(th) * pa.wy + Math.sin(th) * pa.ny;
+            double oz = Math.cos(th) * pa.wz + Math.sin(th) * pa.nz;
+            double rad = s.linkWidth() * 0.5 * scale;
+            double along = (rnd(h, 7) - 0.5) * pitch * 0.6;
+            double x0 = pa.cx + ox * rad + pa.ux * along, y0 = pa.cy + oy * rad + pa.uy * along, z0 = pa.cz + oz * rad + pa.uz * along;
+            double x1, y1, z1, bulge;
+            double len;
+            if (this.arcB[k] > this.arcA[k]) {
+                Part pb = this.parts.get(this.arcB[k]);
+                x1 = pb.cx + ox * rad; y1 = pb.cy + oy * rad; z1 = pb.cz + oz * rad;
+                len = Math.sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0) + (z1 - z0) * (z1 - z0));
+                bulge = len * (0.22 + 0.2 * rnd(h, 8));
+            } else {
+                double tilt = -0.45 + 1.35 * rnd(h, 8);                 // eher nach unten
+                len = s.linkLength() * scale * (1.8 + 2.4 * rnd(h, 9)) * en.arcLength();
+                double dx = ox * Math.cos(tilt) + pa.ux * Math.sin(tilt);
+                double dy = oy * Math.cos(tilt) + pa.uy * Math.sin(tilt);
+                double dz = oz * Math.cos(tilt) + pa.uz * Math.sin(tilt);
+                x1 = x0 + dx * len; y1 = y0 + dy * len; z1 = z0 + dz * len;
+                bulge = 0;
+            }
+
+            // Funken: fliegen aus der Austrittsstelle, fallen und verglühen
+            double age = this.arcAge[k];
+            for (int f = 0; f < en.sparks(); f++) {
+                long fh = mix(h ^ ((f + 1) * 0x9E3779B97F4A7C15L));
+                double birth = rnd(fh, 1) * this.arcDur[k] * 0.6;
+                double life = 0.35 + 0.6 * rnd(fh, 2);
+                double tau = age - birth;
+                if (tau < 0 || tau > life) continue;
+                double s01 = tau / life;
+                double phi = -0.7 + 1.6 * rnd(fh, 3);
+                double spread = (rnd(fh, 4) - 0.5) * 1.6;
+                // seitliche Streuung: quer zu Austrittsrichtung und Kette
+                double qx = oy * pa.uz - oz * pa.uy, qy = oz * pa.ux - ox * pa.uz, qz = ox * pa.uy - oy * pa.ux;
+                double vx = ox * Math.cos(phi) + pa.ux * Math.sin(phi) + qx * spread;
+                double vy = oy * Math.cos(phi) + pa.uy * Math.sin(phi) + qy * spread;
+                double vz = oz * Math.cos(phi) + pa.uz * Math.sin(phi) + qz * spread;
+                double vl = Math.sqrt(vx * vx + vy * vy + vz * vz);
+                double speed = s.linkLength() * scale * (1.2 + 2.2 * rnd(fh, 5)) / vl;
+                double travel = tau * (1 - 0.35 * s01);                 // Luftwiderstand
+                double g = s.linkLength() * scale * 2.6;
+                Part p = part(nParts++);
+                p.shard = true;
+                p.cx = x0 + vx * speed * travel;
+                p.cy = y0 + vy * speed * travel - 0.5 * g * tau * tau;
+                p.cz = z0 + vz * speed * travel;
+                double a1 = rnd(fh, 6) * Math.PI * 2, a2 = Math.acos(2 * rnd(fh, 7) - 1);
+                setRotation(p, Math.sin(a2) * Math.cos(a1), Math.cos(a2), Math.sin(a2) * Math.sin(a1), tau * 9 + rnd(fh, 8) * 6.3);
+                double size = s.thickness() * scale * 0.2 * (1 - 0.5 * s01) * (0.7 + 0.6 * rnd(fh, 9));
+                p.sx = size; p.sy = size * 2.4; p.sz = size;
+                p.glow = 1.0;
+                p.seed = fh;
+                p.damage = 0; p.energy = 0; p.flow = 0; p.flare = 0; p.hit = false;
+                p.alpha = 1F;
+                p.topRelY = topRelY;
+                p.fadeLen = topFade;
+                p.shardAlpha = (float) (smooth(0, 0.06, s01) * Math.pow(1 - s01, 1.3));
+            }
+
+            double inten = this.arcI[k];
+            if (glowSink == null || inten < 0.01) continue;
+            // Form: grobe Linie bleibt, feines Zittern wechselt mit dem Knistern
+            long jitter = mix(h + this.arcFrame[k] * 0x632BE59BD9B4E019L);
+            zigzag3(this.arcPts, x0, y0, z0, x1, y1, z1, bulge, ox, oy, oz, 5, 0.3, h, jitter);
+            double core = Math.max(0.08, s.thickness() * scale * 0.16);
+            double halo = s.thickness() * scale * 1.5;
+            ribbon3(this.arcPts, halo, halo * 0.6, (float) Math.min(1, inten * 0.32), glowSink);
+            ribbon3(this.arcPts, core, core * (bulge > 0 ? 1.0 : 0.45), (float) Math.min(1, inten), glowSink);
+            // Verzweigungen
+            int nb = 1 + (rnd(h, 10) < 0.5 ? 1 : 0);
+            int n = this.arcPts.size();
+            for (int b = 0; b < nb; b++) {
+                long bh = mix(h ^ ((b + 7) * 0xD1B54A32D192ED03L));
+                int idx = Math.max(1, Math.min(n - 2, (int) (n * (0.25 + 0.45 * rnd(bh, 1)))));
+                double[] p = this.arcPts.get(idx), q = this.arcPts.get(idx + 1);
+                double tx = q[0] - p[0], ty = q[1] - p[1], tz = q[2] - p[2];
+                double tl = Math.sqrt(tx * tx + ty * ty + tz * tz) + 1e-9;
+                double rx = rnd(bh, 2) - 0.5, ry = rnd(bh, 3) - 0.5, rz = rnd(bh, 4) - 0.5;
+                double bl = len * (0.25 + 0.3 * rnd(bh, 5));
+                double ex2 = p[0] + (tx / tl * 0.7 + rx * 1.3) * bl;
+                double ey2 = p[1] + (ty / tl * 0.7 + ry * 1.3 - 0.3) * bl;
+                double ez2 = p[2] + (tz / tl * 0.7 + rz * 1.3) * bl;
+                zigzag3(this.arcBranch, p[0], p[1], p[2], ex2, ey2, ez2, 0, 0, 0, 0, 3, 0.35, bh, mix(bh + jitter));
+                ribbon3(this.arcBranch, halo * 0.6, halo * 0.3, (float) Math.min(1, inten * 0.2), glowSink);
+                ribbon3(this.arcBranch, core * 0.8, core * 0.25, (float) Math.min(1, inten * 0.75), glowSink);
+            }
+        }
+        return nParts;
+    }
+
+    /** Zickzack-Linie per Mittelpunkt-Verschiebung im Raum; die ersten zwei Stufen fest, der Rest zittert. */
+    private void zigzag3(ArrayList<double[]> out, double x0, double y0, double z0, double x1, double y1, double z1,
+                         double bulge, double bx, double by, double bz, int levels, double rough, long hStable, long hJitter) {
+        out.clear();
+        out.add(new double[]{x0, y0, z0});
+        if (bulge > 0) {
+            out.add(new double[]{(x0 + x1) * 0.5 + bx * bulge, (y0 + y1) * 0.5 + by * bulge, (z0 + z1) * 0.5 + bz * bulge});
+        }
+        out.add(new double[]{x1, y1, z1});
+        int counter = 0;
+        for (int lv = 0; lv < levels; lv++) {
+            long h = lv < 2 ? hStable : hJitter;
+            this.arcTmp.clear();
+            for (int i = 0; i < out.size() - 1; i++) {
+                double[] p = out.get(i), q = out.get(i + 1);
+                double dx = q[0] - p[0], dy = q[1] - p[1], dz = q[2] - p[2];
+                double sl = Math.sqrt(dx * dx + dy * dy + dz * dz) + 1e-9;
+                // zufällige Richtung quer zum Abschnitt
+                double rx = rnd(h, 1000 + counter) - 0.5, ry = rnd(h, 2000 + counter) - 0.5, rz = rnd(h, 3000 + counter) - 0.5;
+                double off = (rnd(h, 4000 + counter) - 0.5) * 2 * sl * rough;
+                counter++;
+                double d = (rx * dx + ry * dy + rz * dz) / (sl * sl);
+                rx -= dx * d; ry -= dy * d; rz -= dz * d;
+                double rl = Math.sqrt(rx * rx + ry * ry + rz * rz) + 1e-9;
+                this.arcTmp.add(p);
+                this.arcTmp.add(new double[]{(p[0] + q[0]) * 0.5 + rx / rl * off, (p[1] + q[1]) * 0.5 + ry / rl * off,
+                        (p[2] + q[2]) * 0.5 + rz / rl * off});
+            }
+            this.arcTmp.add(out.get(out.size() - 1));
+            out.clear();
+            out.addAll(this.arcTmp);
+        }
+    }
+
+    /** Leuchtendes Band entlang der Punkte, immer zur Kamera gedreht. */
+    private void ribbon3(List<double[]> pts, double startHalfWidth, double endHalfWidth, float alpha, QuadSink sink) {
+        int n = pts.size();
+        if (n < 2 || alpha < 0.003F) return;
+        double prevLx = 0, prevLy = 0, prevLz = 0, prevRx = 0, prevRy = 0, prevRz = 0;
+        float prevA = 0;
+        for (int i = 0; i < n; i++) {
+            double[] a = pts.get(Math.max(0, i - 1)), b = pts.get(Math.min(n - 1, i + 1)), p = pts.get(i);
+            double tx = b[0] - a[0], ty = b[1] - a[1], tz = b[2] - a[2];
+            double sx = p[1] * tz - p[2] * ty, sy = p[2] * tx - p[0] * tz, sz = p[0] * ty - p[1] * tx;
+            double sl = Math.sqrt(sx * sx + sy * sy + sz * sz);
+            if (sl < 1e-9) { sx = 1; sy = 0; sz = 0; sl = 1; }
+            double f = i / (double) (n - 1);
+            double hw = startHalfWidth + (endHalfWidth - startHalfWidth) * f;
+            sx *= hw / sl; sy *= hw / sl; sz *= hw / sl;
+            float al = (float) (alpha * Math.min(1, (1 - f) * 6 + 0.35));   // Spitze läuft aus
+            if (i > 0) {
+                put4(gxyz, 0, prevLx, prevLy, prevLz); put4(gxyz, 1, p[0] - sx, p[1] - sy, p[2] - sz);
+                put4(gxyz, 2, p[0] + sx, p[1] + sy, p[2] + sz); put4(gxyz, 3, prevRx, prevRy, prevRz);
+                guv[0] = 0; guv[1] = 0.5F; guv[2] = 0; guv[3] = 0.5F; guv[4] = 1; guv[5] = 0.5F; guv[6] = 1; guv[7] = 0.5F;
+                galpha[0] = prevA; galpha[1] = al; galpha[2] = al; galpha[3] = prevA;
+                sink.quad(gxyz, guv, galpha);
+            }
+            prevLx = p[0] - sx; prevLy = p[1] - sy; prevLz = p[2] - sz;
+            prevRx = p[0] + sx; prevRy = p[1] + sy; prevRz = p[2] + sz;
             prevA = al;
         }
     }
@@ -752,11 +1022,13 @@ public final class ChainGeometry {
             float[] v = this.veinCache.get(seed);
             if (v != null) return v;
             if (this.veinCache.size() > 1500) this.veinCache.clear();
-            v = new float[nv];
+            // zwei unabhängige Muster – im Spiel wird zwischen ihnen weich "gedreht", dadurch wabern die Adern
+            v = new float[nv * 2];
             double sc = 1.0 / Math.max(0.05, r * 1.5);
             double off = ((seed >>> 8) & 255) * 0.53;
             for (int i = 0; i < nv; i++) {
                 v[i] = (float) fbm(pu[i] * sc + off, pw[i] * sc, pn[i] * sc + 3.1, seed ^ 0x5EEDL);
+                v[nv + i] = (float) fbm(pu[i] * sc + 11.7, pw[i] * sc + off, pn[i] * sc - 5.3, seed ^ 0xB10BL);
             }
             this.veinCache.put(seed, v);
             return v;
@@ -769,7 +1041,12 @@ public final class ChainGeometry {
             double melt = damaged ? r * 0.45 * Math.min(1, d * 1.6) : 0;
             double sc = p.scale;
             float[] veins = p.energy > 0.01 ? veinsFor(p.seed) : null;
-            double vThr = 0.72 - 0.2 * p.energy;               // mehr Energie = mehr Adern
+            double flow = Math.min(1.5, p.flow), flare = Math.min(1.2, p.flare);
+            // mehr Energie = mehr Adern; Energie-Stöße und Bögen lassen das Glied aufglühen
+            double vThr = 0.72 - 0.2 * Math.min(1, p.energy) - 0.09 * Math.min(1, flow) - 0.16 * Math.min(1, flare);
+            double vBoost = Math.min(1, p.energy * 1.6) * (1 + 0.8 * flow + 1.2 * flare);
+            double baseGlow = 0.26 * Math.min(1, flow) + 0.42 * flare;
+            double cph = Math.cos(p.veinPhase), sph = Math.sin(p.veinPhase);
 
             for (int idx = 0; idx < nv; idx++) {
                 double lu = pu[idx], lw = pw[idx], ln = pn[idx];
@@ -794,11 +1071,12 @@ public final class ChainGeometry {
                     glow = glow * glow * (3 - 2 * glow);
                 }
                 if (veins != null) {
-                    double vv = veins[idx];
+                    double vv = 0.5 + (veins[idx] - 0.5) * cph + (veins[nv + idx] - 0.5) * sph;
                     double edge = Math.exp(-((vv - vThr) / 0.022) * ((vv - vThr) / 0.022));   // helle Ränder
                     double fill = smooth(vThr, vThr + 0.06, vv) * 0.28;                       // leicht glühende Fläche
-                    glow = Math.max(glow, (edge * 0.95 + fill) * Math.min(1, p.energy * 1.6));
+                    glow = Math.max(glow, (edge * 0.95 + fill) * vBoost);
                 }
+                glow = Math.max(glow, baseGlow);
                 vU[idx] = (float) (0.02 + 0.96 * Math.min(1, glow) * p.pulse);
                 vx[idx] = (float) x; vy[idx] = (float) y; vz[idx] = (float) z;
                 vA[idx] = topAlpha(p.topRelY - y, p.fadeLen);

@@ -58,6 +58,16 @@
     "waveLength": 13,
     "wavePeriod": 4.6
   },
+  "energy": {
+    "flow": 1.0,
+    "flowSpeed": 1.0,
+    "flowInterval": 6.0,
+    "shimmer": 1.0,
+    "arcs": 1.0,
+    "arcInterval": 9.0,
+    "arcLength": 1.0,
+    "sparks": 7
+  },
   "properties": {
     "layer": 6
   },
