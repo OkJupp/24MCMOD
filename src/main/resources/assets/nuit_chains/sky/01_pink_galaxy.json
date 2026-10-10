@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "type": "square-textured",
+  "texture": "nuit_chains:sky/pink_galaxy.png",
+  "properties": {
+    "layer": 1,
+    "sunSkyTint": false,
+    "fog": {
+      "modifyColors": true,
+      "red": 0.32,
+      "green": 0.10,
+      "blue": 0.36
+    }
+  },
+  "conditions": {
+    "skyboxes": { "entries": ["minecraft:overworld"] }
+  }
+}

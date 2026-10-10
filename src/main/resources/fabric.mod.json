@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "nuit_chains",
+  "version": "${version}",
+  "name": "Nuit Chains",
+  "description": "Pinker Galaxy-Himmel mit echten 3D-Ketten, die leicht pendeln. Addon für Nuit.",
+  "authors": ["Jupp"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["de.jupp.nuitchains.NuitChainsClient"]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~26.3",
+    "nuit": "*"
+  }
+}

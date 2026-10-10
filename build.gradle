@@ -1,0 +1,46 @@
+plugins {
+    id 'dev.architectury.loom-no-remap' version '1.17.493'
+}
+
+group = project.maven_group
+version = "${project.mod_version}+mc${project.minecraft_version}"
+
+base {
+    archivesName = project.archives_name
+}
+
+repositories {
+    maven {
+        name = "Modrinth"
+        url = "https://api.modrinth.com/maven"
+        content { includeGroup "maven.modrinth" }
+    }
+}
+
+dependencies {
+    minecraft "net.minecraft:minecraft:${project.minecraft_version}"
+    implementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
+    // Nuit wird nur zum Kompilieren gebraucht – im Spiel muss es separat installiert sein
+    compileOnly "maven.modrinth:nuit:${project.nuit_version}"
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 25
+    it.options.encoding = "UTF-8"
+}
+
+processResources {
+    def v = project.version.toString()
+    inputs.property "version", v
+    filesMatching("fabric.mod.json") {
+        expand version: v
+    }
+}

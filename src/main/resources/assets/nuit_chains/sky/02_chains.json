@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "type": "nuit_chains:chains",
+  "tint": { "red": 1.0, "green": 0.92, "blue": 1.0 },
+  "chains": {
+    "spacing": 150,
+    "chance": 0.45,
+    "cellRadius": 2,
+    "topY": 330,
+    "minLength": 100,
+    "maxLength": 210,
+    "linkLength": 6.0,
+    "linkWidth": 3.6,
+    "thickness": 0.5,
+    "swingDegrees": 4.0,
+    "swingSpeed": 1.0,
+    "wave": 0.6,
+    "seed": 2424
+  },
+  "properties": {
+    "layer": 2
+  },
+  "conditions": {
+    "skyboxes": { "entries": ["minecraft:overworld"] }
+  }
+}
