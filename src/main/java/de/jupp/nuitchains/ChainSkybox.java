@@ -60,6 +60,7 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
             DamageSettings.CODEC.optionalFieldOf("damage", DamageSettings.DEFAULT).forGetter(ChainSkybox::getDamage),
             VariationSettings.CODEC.optionalFieldOf("variation", VariationSettings.DEFAULT).forGetter(ChainSkybox::getVariation),
             MotionSettings.CODEC.optionalFieldOf("motion", MotionSettings.DEFAULT).forGetter(ChainSkybox::getMotion),
+            StyleSettings.CODEC.optionalFieldOf("style", StyleSettings.DEFAULT).forGetter(ChainSkybox::getStyle),
             Codec.floatRange(0F, 3F).optionalFieldOf("glow", 0.45F).forGetter(ChainSkybox::getGlow),
             Codec.floatRange(0F, 1000F).optionalFieldOf("nearDistance", 220F).forGetter(ChainSkybox::getNearDistance),
             Codec.BOOL.optionalFieldOf("hideClouds", true).forGetter(ChainSkybox::isHideClouds)
@@ -71,6 +72,7 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
     private final DamageSettings damage;
     private final VariationSettings variation;
     private final MotionSettings motion;
+    private final StyleSettings style;
     private final float glow;
     private final float nearDistance;
     private final boolean hideClouds;
@@ -103,7 +105,7 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
 
     public ChainSkybox(Properties properties, Conditions conditions, Identifier texture, RGBA tint,
                        ChainSettings settings, DamageSettings damage, VariationSettings variation,
-                       MotionSettings motion, float glow, float nearDistance, boolean hideClouds) {
+                       MotionSettings motion, StyleSettings style, float glow, float nearDistance, boolean hideClouds) {
         super(properties, conditions);
         this.texture = texture;
         this.tint = tint;
@@ -111,10 +113,11 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
         this.damage = damage;
         this.variation = variation;
         this.motion = motion;
+        this.style = style;
         this.glow = glow;
         this.nearDistance = nearDistance;
         this.hideClouds = hideClouds;
-        this.geometry = new ChainGeometry(settings, damage, variation, motion, glow);
+        this.geometry = new ChainGeometry(settings, damage, variation, motion, glow, style);
     }
 
     private FarChain farChain(int index, float fade) {
@@ -270,6 +273,10 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
 
     public VariationSettings getVariation() {
         return this.variation;
+    }
+
+    public StyleSettings getStyle() {
+        return this.style;
     }
 
     public float getGlow() {

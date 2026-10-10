@@ -50,15 +50,20 @@ public final class ChainGeometry {
 
     public ChainGeometry(ChainSettings settings, DamageSettings damage, VariationSettings variation, MotionSettings motion,
                          float glowStrength) {
+        this(settings, damage, variation, motion, glowStrength, StyleSettings.DEFAULT);
+    }
+
+    public ChainGeometry(ChainSettings settings, DamageSettings damage, VariationSettings variation, MotionSettings motion,
+                         float glowStrength, StyleSettings style) {
         this.glowStrength = glowStrength;
         this.s = settings;
         this.dmg = damage;
         this.var = variation;
         this.mot = motion;
-        this.meshNear = new LinkMesh(settings, 13, 12, 8);
-        this.meshMid = new LinkMesh(settings, 8, 8, 5);
-        this.meshFar = new LinkMesh(settings, 5, 6, 4);
-        this.meshDamaged = new LinkMesh(settings, 30, 22, 10);
+        this.meshNear = new LinkMesh(settings, style, 13, 12, 10);
+        this.meshMid = new LinkMesh(settings, style, 8, 8, 6);
+        this.meshFar = new LinkMesh(settings, style, 5, 6, 4);
+        this.meshDamaged = new LinkMesh(settings, style, 30, 22, 10);
     }
 
     // ------------------------------------------------------------------ Zufall & Rauschen
@@ -545,7 +550,18 @@ public final class ChainGeometry {
         private final float[] quv = new float[8];
         private final HashMap<Long, float[]> noiseCache = new HashMap<>();
 
-        LinkMesh(ChainSettings s, int arcSegments, int tubeSegments, int spikeSegments) {
+        /** Profil der geraden Stacheln: Paare (Abstand von der Rohrmitte, Radius) in Rohr-Radien, jede Strecke mit harter Kante. */
+        private static final double[][] STUD = {
+                {0.0, 0.48}, {1.05, 0.48},      // Stiel
+                {1.05, 0.48}, {1.05, 0.84},     // Stufe nach außen
+                {1.05, 0.84}, {1.42, 0.84},     // Kragen
+                {1.42, 0.84}, {1.42, 0.64},     // Stufe nach innen
+                {1.42, 0.64}, {1.52, 0.64},     // Hals
+                {1.52, 0.64}, {1.52, 0.78},     // Stufe zur Spitze
+                {1.52, 0.78}, {3.75, 0.0}       // Kegel
+        };
+
+        LinkMesh(ChainSettings s, StyleSettings style, int arcSegments, int tubeSegments, int spikeSegments) {
             this.r = s.thickness();
             this.halfLen = Math.max(0.1, s.linkLength() * 0.5 - r);
             double b = Math.max(r * 1.15, s.linkWidth() * 0.5 - r);
@@ -576,7 +592,9 @@ public final class ChainGeometry {
             int spikesPerSide = s.spikes();
             int ks = Math.max(3, spikeSegments);
             int spikeCount = spikesPerSide * 2;
-            this.nv = m * k + spikeCount * (SPIKE_RINGS * ks + 1);
+            boolean hooks = style.hooks();
+            int perSpike = hooks ? SPIKE_RINGS * ks + 1 : STUD.length * ks;
+            this.nv = m * k + spikeCount * perSpike;
             pu = new double[nv]; pw = new double[nv]; pn = new double[nv];
             nu = new double[nv]; nw = new double[nv]; nn = new double[nv];
 
@@ -602,9 +620,47 @@ public final class ChainGeometry {
             // Dornen: gebogene Widerhaken auf den Längsseiten – der obere biegt sich nach oben,
             // der untere nach unten (wie Fledermausflügel), Querschnitt läuft spitz zu
             int base = m * k;
-            double spikeLen = r * 2.3, spikeRad = r * 0.5;
+            double spikeLen = r * 2.3 * style.spikeSize(), spikeRad = r * 0.5 * style.spikeSize();
             int rings = SPIKE_RINGS;
-            for (int side = -1; side <= 1; side += 2) {
+            if (!hooks) {
+                // Gerade Stacheln mit Kragen, genau seitlich nach außen (wie Nieten-Dornen)
+                double sz = style.spikeSize();
+                for (int side = -1; side <= 1; side += 2) {
+                    for (int q = 0; q < spikesPerSide; q++) {
+                        double t = spikesPerSide == 1 ? 0 : (2.0 * (q + 0.5) / spikesPerSide - 1) * 0.7;
+                        double cu0 = straight * t, cw0 = side * b;
+                        double stemEnd = r * Math.max(1.05, 1.05 * sz);       // Stiel muss aus dem Rohr ragen
+                        for (int sg = 0; sg < STUD.length; sg += 2) {
+                            double d0 = STUD[sg][0] == 0 ? r * 0.85 : stemEnd + (STUD[sg][0] - 1.05) * r * sz;   // Stiel beginnt knapp unter der Oberfläche
+                            double d1 = stemEnd + (STUD[sg + 1][0] - 1.05) * r * sz;
+                            double r0 = STUD[sg][1] * r * sz, r1 = STUD[sg + 1][1] * r * sz;
+                            double dd = d1 - d0, dr = r1 - r0, dl = Math.sqrt(dd * dd + dr * dr);
+                            // Normale im Profil: radial*dd - achse*dr
+                            double na = -dr / dl, nr = dd / dl;
+                            for (int end = 0; end < 2; end++) {
+                                double dist = end == 0 ? d0 : d1, rad = end == 0 ? r0 : r1;
+                                for (int j = 0; j < ks; j++) {
+                                    double phi = 2 * Math.PI * j / ks;
+                                    double cs = Math.cos(phi), sn = Math.sin(phi);
+                                    int idx = base + (sg + end) * ks + j;
+                                    // Achse = W (seitlich), radial in U/N
+                                    pu[idx] = cu0 + rad * cs;
+                                    pw[idx] = cw0 + side * dist;
+                                    pn[idx] = rad * sn;
+                                    nu[idx] = nr * cs; nw[idx] = side * na; nn[idx] = nr * sn;
+                                }
+                            }
+                            for (int j = 0; j < ks; j++) {
+                                int j1 = (j + 1) % ks;
+                                int a0 = base + sg * ks, a1 = base + (sg + 1) * ks;
+                                quadList.add(new int[]{a0 + j, a0 + j1, a1 + j1, a1 + j});
+                            }
+                        }
+                        base += STUD.length * ks;
+                    }
+                }
+            }
+            for (int side = -1; side <= 1 && hooks; side += 2) {
                 for (int q = 0; q < spikesPerSide; q++) {
                     double t = spikesPerSide == 1 ? 0 : (2.0 * (q + 0.5) / spikesPerSide - 1) * 0.7;
                     double cu0 = straight * t, cw0 = side * (b + r * 0.45);

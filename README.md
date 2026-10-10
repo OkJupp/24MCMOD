@@ -41,12 +41,14 @@ Wichtige Werte in `06_chains.json` → `chains`:
 | `topY` | Aufhänge-Höhe | 450 |
 | `minLength` / `maxLength` | Kettenlänge (wird gekürzt, falls sie unter `minBottomY` reichen würde) | 120 / 220 |
 | `linkLength` / `linkWidth` / `thickness` | Größe der Glieder | 18 / 11.5 / 1.85 |
-| `spikes` | Gebogene Widerhaken pro Seite eines Glieds (0 = glatt) | 2 |
+| `spikes` | Stacheln pro Seite eines Glieds (0 = glatt) | 1 |
 | `lean` | Maximale Schräglage einer Kette (Grad) | 12 |
 | `topFade` | Über wie viele Blöcke die Kette oben weich aus dem Nichts eingeblendet wird (höchstens 40 % der Kettenlänge) | 150 |
 | `swingDegrees` / `swingSpeed` | Pendel-Ausschlag und Tempo | 1 / 1 |
 | `wave` | Wie stark sich die Kette beim Pendeln biegt | 0.6 |
 | `seed` | Andere Zahl = andere Verteilung | 2424 |
+
+Unter `style`: `spikeStyle` (`"studded"` = gerade Stacheln mit Kragen, `"hooks"` = gebogene Widerhaken), `spikeSize` (Größe der Stacheln, 1 = normal).
 
 Unter `damage`: `brokenChance` (Anteil zerfallender Ketten), `brokenLinks` (wie viele Glieder am Ende zerfallen), `wear` / `wearStrength` (Anteil und Größe der Einschläge entlang der ganzen Kette), `fragments` / `fragmentFall` (glühende Tropfen unter dem Ende), `veins` (leuchtende Energie-Adern auf den Gliedern, zum Ende hin stärker, 0–1, Standard 0.6).
 

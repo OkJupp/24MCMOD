@@ -20,12 +20,16 @@
     "linkWidth": 11.5,
     "thickness": 1.85,
     "lean": 12,
-    "spikes": 2,
+    "spikes": 1,
     "topFade": 150,
     "swingDegrees": 1.0,
     "swingSpeed": 1.0,
     "wave": 0.6,
     "seed": 2424
+  },
+  "style": {
+    "spikeStyle": "studded",
+    "spikeSize": 1.0
   },
   "damage": {
     "brokenChance": 0.7,
