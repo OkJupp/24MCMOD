@@ -12,11 +12,12 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
  * @param wearStrength  Wie groß diese Einschläge werden (0–1)
  * @param fragments     Anzahl Bruchstücke, die unter einer zerfallenden Kette schweben
  * @param fragmentFall  Wie weit die Bruchstücke nach unten treiben, bevor sie verschwinden (Blöcke)
+ * @param veins         Leuchtende Energie-Adern auf den Gliedern (0 = keine, 1 = viele), zum Ende hin stärker
  */
 public record DamageSettings(float brokenChance, int brokenLinks, float wear, float wearStrength,
-                             int fragments, float fragmentFall) {
+                             int fragments, float fragmentFall, float veins) {
 
-    public static final DamageSettings DEFAULT = new DamageSettings(0.7F, 4, 0.05F, 0.6F, 5, 40F);
+    public static final DamageSettings DEFAULT = new DamageSettings(0.7F, 4, 0.05F, 0.6F, 5, 40F, 0.6F);
 
     public static final Codec<DamageSettings> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.floatRange(0F, 1F).optionalFieldOf("brokenChance", DEFAULT.brokenChance()).forGetter(DamageSettings::brokenChance),
@@ -24,6 +25,7 @@ public record DamageSettings(float brokenChance, int brokenLinks, float wear, fl
             Codec.floatRange(0F, 1F).optionalFieldOf("wear", DEFAULT.wear()).forGetter(DamageSettings::wear),
             Codec.floatRange(0F, 1F).optionalFieldOf("wearStrength", DEFAULT.wearStrength()).forGetter(DamageSettings::wearStrength),
             Codec.intRange(0, 128).optionalFieldOf("fragments", DEFAULT.fragments()).forGetter(DamageSettings::fragments),
-            Codec.floatRange(0F, 500F).optionalFieldOf("fragmentFall", DEFAULT.fragmentFall()).forGetter(DamageSettings::fragmentFall)
+            Codec.floatRange(0F, 500F).optionalFieldOf("fragmentFall", DEFAULT.fragmentFall()).forGetter(DamageSettings::fragmentFall),
+            Codec.floatRange(0F, 1F).optionalFieldOf("veins", DEFAULT.veins()).forGetter(DamageSettings::veins)
     ).apply(i, DamageSettings::new));
 }

@@ -23,14 +23,15 @@ Die Einstellungen liegen in `src/main/resources/assets/nuit_chains/sky/`:
 |---|---|
 | `01_pink_galaxy.json` | Hintergrund-Himmel |
 | `02_haze_low.json` / `03_haze_high.json` | Zwei langsam treibende Nebel-Schichten (`speed` = Tempo, negativ = andere Richtung) |
-| `04_lightning.json` | Blitze |
-| `05_chains.json` | Ketten: Anzahl, Höhe, Größe, Pendeln, Schäden |
+| `04_clouds.json` | Düstere Wolkenbänke mit pink angestrahlten Rändern (treiben ganz langsam) |
+| `05_lightning.json` | Blitze |
+| `06_chains.json` | Ketten: Anzahl, Höhe, Größe, Bewegung, Schäden |
 
 Eine Ebene ausschalten: Datei per eigenem Ressourcenpaket überschreiben und `"conditions": { "skyboxes": { "entries": ["minecraft:none"] } }` setzen.
 
 Mit einem eigenen Ressourcenpaket lassen sich diese Dateien auch überschreiben, und zwar unter demselben Pfad `assets/nuit_chains/sky/…`.
 
-Wichtige Werte in `05_chains.json` → `chains`:
+Wichtige Werte in `06_chains.json` → `chains`:
 
 | Wert | Bedeutung | Standard |
 |---|---|---|
@@ -39,15 +40,15 @@ Wichtige Werte in `05_chains.json` → `chains`:
 | `cellRadius` | Wie viele Felder rundum sichtbar sind (mehr = mehr Ketten, mehr Leistung) | 2 |
 | `topY` | Aufhänge-Höhe | 450 |
 | `minLength` / `maxLength` | Kettenlänge (wird gekürzt, falls sie unter `minBottomY` reichen würde) | 120 / 220 |
-| `linkLength` / `linkWidth` / `thickness` | Größe der Glieder | 18 / 11.5 / 2.4 |
-| `spikes` | Dornen pro Seite eines Glieds (0 = glatt) | 2 |
+| `linkLength` / `linkWidth` / `thickness` | Größe der Glieder | 18 / 11.5 / 1.85 |
+| `spikes` | Gebogene Widerhaken pro Seite eines Glieds (0 = glatt) | 2 |
 | `lean` | Maximale Schräglage einer Kette (Grad) | 12 |
 | `topFade` | Über wie viele Blöcke die Kette oben weich aus dem Nichts eingeblendet wird (höchstens 40 % der Kettenlänge) | 150 |
 | `swingDegrees` / `swingSpeed` | Pendel-Ausschlag und Tempo | 1 / 1 |
 | `wave` | Wie stark sich die Kette beim Pendeln biegt | 0.6 |
 | `seed` | Andere Zahl = andere Verteilung | 2424 |
 
-Unter `damage`: `brokenChance` (Anteil zerfallender Ketten), `brokenLinks` (wie viele Glieder am Ende zerfallen), `wear` / `wearStrength` (Anteil und Größe der Einschläge entlang der ganzen Kette), `fragments` / `fragmentFall` (Kristall-Splitter unter dem Ende).
+Unter `damage`: `brokenChance` (Anteil zerfallender Ketten), `brokenLinks` (wie viele Glieder am Ende zerfallen), `wear` / `wearStrength` (Anteil und Größe der Einschläge entlang der ganzen Kette), `fragments` / `fragmentFall` (glühende Tropfen unter dem Ende), `veins` (leuchtende Energie-Adern auf den Gliedern, zum Ende hin stärker, 0–1, Standard 0.6).
 
 Unter `variation`: `sizeMin` / `sizeMax` (Größenbereich der Ketten), `giantChance` / `giantSize` (seltene Riesen-Ketten), `topYVariation` (wie stark die Aufhängehöhe schwankt), `minBottomY` (tiefster Punkt, bis zu dem eine Kette hängen darf – Standard 230).
 
@@ -57,7 +58,7 @@ Weitere Schalter: `hideClouds` (Vanilla-Wolken **und** die LOD-Wolken von Distan
 
 `glow` = Stärke des Leuchtens um die Ketten (0 = aus, Standard 0.45; leuchtet bei Blitzen kurz mit auf). `tint` färbt die Ketten ein, z. B. `{ "red": 1, "green": 0.6, "blue": 0.9 }`.
 
-### Blitze (`04_lightning.json` → `lightning`)
+### Blitze (`05_lightning.json` → `lightning`)
 
 | Wert | Bedeutung | Standard |
 |---|---|---|

@@ -123,7 +123,7 @@ public final class ChainGeometry {
         double fres = edge * edge * Math.sqrt(edge);
         double f = Math.max(0, nDotView);
         double f2 = f * f, f4 = f2 * f2, spec = f4 * f4 * f4;
-        double l = 0.10 + 0.25 * lam + 0.72 * fres + 0.15 * spec;
+        double l = 0.05 + 0.2 * lam + 0.85 * fres + 0.22 * spec;
         return Math.min(0.995, Math.max(0.005, l));
     }
 
@@ -198,6 +198,7 @@ public final class ChainGeometry {
         boolean hit;      // Einschlag statt Zerfall
         double scale = 1; // Größe des Glieds
         double pulse = 1; // Glühen der Bruchkanten (pulsiert)
+        double energy;    // Stärke der Energie-Adern (0..1)
         float alpha;      // grobe Deckkraft des ganzen Teils (zum Überspringen)
         double topRelY;   // Aufhängehöhe relativ zur Kamera (für weiches Ausblenden pro Ecke)
         double fadeLen;   // Länge des Ausblendens
@@ -332,6 +333,9 @@ public final class ChainGeometry {
             }
             p.damage = damage;
             p.hit = hit;
+            // Energie-Adern: überall ein wenig, zum (zerfallenden) Ende hin deutlich mehr
+            double nearEnd = smooth(0.45, 1.0, f) * (c.broken() ? 1.0 : 0.5);
+            p.energy = dmg.veins() * (0.25 + 0.75 * nearEnd) * (0.6 + 0.4 * rnd(p.seed, 7));
             // oben langsam aus dem Nichts einblenden (pro Ecke, siehe LinkMesh.emit)
             p.topRelY = topRelY;
             p.fadeLen = topFade;
@@ -373,6 +377,7 @@ public final class ChainGeometry {
                 p.glow = 0.75 + 0.25 * rnd(fh, 14);               // glühende Tropfen
                 p.seed = fh;
                 p.damage = 0;
+                p.energy = 0;
                 p.hit = false;
                 p.alpha = 1F;
                 p.topRelY = topRelY;
@@ -520,6 +525,7 @@ public final class ChainGeometry {
      * N senkrecht zur Ring-Ebene.
      */
     static final class LinkMesh {
+        static final int SPIKE_RINGS = 3;
         final int m, k;              // Rohr: Punkte entlang des Rings / um das Rohr
         final int nv;                // Anzahl Ecken gesamt
         final double[] pu, pw, pn;   // Position
@@ -570,7 +576,7 @@ public final class ChainGeometry {
             int spikesPerSide = s.spikes();
             int ks = Math.max(3, spikeSegments);
             int spikeCount = spikesPerSide * 2;
-            this.nv = m * k + spikeCount * (ks + 1);
+            this.nv = m * k + spikeCount * (SPIKE_RINGS * ks + 1);
             pu = new double[nv]; pw = new double[nv]; pn = new double[nv];
             nu = new double[nv]; nw = new double[nv]; nn = new double[nv];
 
@@ -593,38 +599,54 @@ public final class ChainGeometry {
                 }
             }
 
+            // Dornen: gebogene Widerhaken auf den Längsseiten – der obere biegt sich nach oben,
+            // der untere nach unten (wie Fledermausflügel), Querschnitt läuft spitz zu
             int base = m * k;
-            double spikeLen = r * 1.6, spikeRad = r * 0.42;
+            double spikeLen = r * 2.3, spikeRad = r * 0.5;
+            int rings = SPIKE_RINGS;
             for (int side = -1; side <= 1; side += 2) {
                 for (int q = 0; q < spikesPerSide; q++) {
-                    double t = spikesPerSide == 1 ? 0 : (2.0 * (q + 0.5) / spikesPerSide - 1) * 0.75;
-                    double cu0 = straight * t, cw0 = side * (b + r * 0.55);
-                    // Richtung: nach außen und etwas nach oben
-                    double du = -0.55, dw = side, dl = Math.sqrt(du * du + dw * dw);
-                    du /= dl; dw /= dl;
-                    // senkrechte Basis-Achsen zum Kegel: e1 in Ring-Ebene, e2 = N
-                    double e1u = -dw, e1w = du;
-                    for (int j = 0; j < ks; j++) {
-                        double phi = 2 * Math.PI * j / ks;
-                        double cs = Math.cos(phi), sn = Math.sin(phi);
-                        int idx = base + j;
-                        pu[idx] = cu0 + spikeRad * cs * e1u;
-                        pw[idx] = cw0 + spikeRad * cs * e1w;
-                        pn[idx] = spikeRad * sn;
-                        // Kegel-Normale: radial + etwas entlang der Spitze
-                        double ru = cs * e1u, rw = cs * e1w, rn = sn;
-                        double sl = spikeRad / spikeLen;
-                        double gu = ru + sl * du, gw = rw + sl * dw, gn = rn;
-                        double gl = Math.sqrt(gu * gu + gw * gw + gn * gn);
-                        nu[idx] = gu / gl; nw[idx] = gw / gl; nn[idx] = gn / gl;
+                    double t = spikesPerSide == 1 ? 0 : (2.0 * (q + 0.5) / spikesPerSide - 1) * 0.7;
+                    double cu0 = straight * t, cw0 = side * (b + r * 0.45);
+                    double curve = spikesPerSide == 1 ? -1 : (t < 0 ? -1 : 1);    // -U = nach oben
+                    for (int ring = 0; ring < rings; ring++) {
+                        double sv = ring / (double) rings;
+                        // Pfad: nach außen, mit wachsender Biegung entlang U
+                        double pu0 = cu0 + curve * spikeLen * 0.85 * sv * sv;
+                        double pw0 = cw0 + side * spikeLen * sv;
+                        double tu = curve * spikeLen * 1.7 * sv, tw = side * spikeLen;
+                        double tl = Math.sqrt(tu * tu + tw * tw);
+                        tu /= tl; tw /= tl;
+                        double e1u = -tw, e1w = tu;                   // senkrecht zum Pfad in der Ring-Ebene
+                        double rad = spikeRad * Math.pow(1 - sv, 1.1);
+                        for (int j = 0; j < ks; j++) {
+                            double phi = 2 * Math.PI * j / ks;
+                            double cs = Math.cos(phi), sn = Math.sin(phi);
+                            int idx = base + ring * ks + j;
+                            pu[idx] = pu0 + rad * cs * e1u;
+                            pw[idx] = pw0 + rad * cs * e1w;
+                            pn[idx] = rad * sn * 0.75;                // etwas flach gedrückt
+                            double sl = spikeRad / spikeLen;
+                            double gu = cs * e1u + sl * tu, gw = cs * e1w + sl * tw, gn = sn;
+                            double gl = Math.sqrt(gu * gu + gw * gw + gn * gn);
+                            nu[idx] = gu / gl; nw[idx] = gw / gl; nn[idx] = gn / gl;
+                        }
                     }
-                    int tip = base + ks;
-                    pu[tip] = cu0 + du * spikeLen; pw[tip] = cw0 + dw * spikeLen; pn[tip] = 0;
-                    nu[tip] = du; nw[tip] = dw; nn[tip] = 0;
-                    for (int j = 0; j < ks; j++) {
-                        quadList.add(new int[]{base + j, base + (j + 1) % ks, tip, tip});
+                    int tip = base + rings * ks;
+                    pu[tip] = cu0 + curve * spikeLen * 0.85; pw[tip] = cw0 + side * spikeLen; pn[tip] = 0;
+                    double tu = curve * 1.7, tw = side, tl = Math.sqrt(tu * tu + tw * tw);
+                    nu[tip] = tu / tl; nw[tip] = tw / tl; nn[tip] = 0;
+                    for (int ring = 0; ring < rings - 1; ring++) {
+                        for (int j = 0; j < ks; j++) {
+                            int j1 = (j + 1) % ks;
+                            quadList.add(new int[]{base + ring * ks + j, base + ring * ks + j1,
+                                    base + (ring + 1) * ks + j1, base + (ring + 1) * ks + j});
+                        }
                     }
-                    base += ks + 1;
+                    for (int j = 0; j < ks; j++) {
+                        quadList.add(new int[]{base + (rings - 1) * ks + j, base + (rings - 1) * ks + (j + 1) % ks, tip, tip});
+                    }
+                    base += rings * ks + 1;
                 }
             }
 
@@ -663,7 +685,24 @@ public final class ChainGeometry {
                 }
                 v[nv + i] = (float) noise(pu[i] * noiseScale * 1.7, pw[i] * noiseScale * 1.7 + off, pn[i] * noiseScale * 1.7, ~seed);
             }
-            this.noiseCache.put(seed, v);
+            this.noiseCache.put(key, v);
+            return v;
+        }
+
+        private final HashMap<Long, float[]> veinCache = new HashMap<>();
+
+        /** Leuchtende Energie-Adern auf der Oberfläche: Rauschwert je Ecke (zwischengespeichert). */
+        private float[] veinsFor(long seed) {
+            float[] v = this.veinCache.get(seed);
+            if (v != null) return v;
+            if (this.veinCache.size() > 1500) this.veinCache.clear();
+            v = new float[nv];
+            double sc = 1.0 / Math.max(0.05, r * 1.5);
+            double off = ((seed >>> 8) & 255) * 0.53;
+            for (int i = 0; i < nv; i++) {
+                v[i] = (float) fbm(pu[i] * sc + off, pw[i] * sc, pn[i] * sc + 3.1, seed ^ 0x5EEDL);
+            }
+            this.veinCache.put(seed, v);
             return v;
         }
 
@@ -673,6 +712,8 @@ public final class ChainGeometry {
             double d = p.damage;
             double melt = damaged ? r * 0.45 * Math.min(1, d * 1.6) : 0;
             double sc = p.scale;
+            float[] veins = p.energy > 0.01 ? veinsFor(p.seed) : null;
+            double vThr = 0.72 - 0.2 * p.energy;               // mehr Energie = mehr Adern
 
             for (int idx = 0; idx < nv; idx++) {
                 double lu = pu[idx], lw = pw[idx], ln = pn[idx];
@@ -696,7 +737,13 @@ public final class ChainGeometry {
                     glow = Math.min(1, Math.max(0, (d + 0.11 - nz[idx]) / 0.11));
                     glow = glow * glow * (3 - 2 * glow);
                 }
-                vU[idx] = (float) (0.02 + 0.96 * glow * p.pulse);
+                if (veins != null) {
+                    double vv = veins[idx];
+                    double edge = Math.exp(-((vv - vThr) / 0.022) * ((vv - vThr) / 0.022));   // helle Ränder
+                    double fill = smooth(vThr, vThr + 0.06, vv) * 0.28;                       // leicht glühende Fläche
+                    glow = Math.max(glow, (edge * 0.95 + fill) * Math.min(1, p.energy * 1.6));
+                }
+                vU[idx] = (float) (0.02 + 0.96 * Math.min(1, glow) * p.pulse);
                 vx[idx] = (float) x; vy[idx] = (float) y; vz[idx] = (float) z;
                 vA[idx] = topAlpha(p.topRelY - y, p.fadeLen);
             }

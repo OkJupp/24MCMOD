@@ -1,7 +1,11 @@
 {
   "schemaVersion": 1,
   "type": "nuit_chains:lightning",
-  "color": { "red": 1.0, "green": 0.82, "blue": 0.96 },
+  "color": {
+    "red": 1.0,
+    "green": 0.82,
+    "blue": 0.96
+  },
   "lightning": {
     "averageInterval": 14,
     "doubleChance": 0.35,
@@ -15,9 +19,13 @@
     "seed": 77
   },
   "properties": {
-    "layer": 4
+    "layer": 5
   },
   "conditions": {
-    "skyboxes": { "entries": ["minecraft:overworld"] }
+    "skyboxes": {
+      "entries": [
+        "minecraft:overworld"
+      ]
+    }
   }
 }

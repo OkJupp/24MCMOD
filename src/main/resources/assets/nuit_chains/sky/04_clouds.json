@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "type": "square-textured",
+  "texture": "nuit_chains:sky/clouds.png",
+  "properties": {
+    "layer": 4,
+    "clock": "game_time",
+    "rotation": {
+      "skyboxRotation": true,
+      "speed": 0.15,
+      "axis": { "0": [0.0, 0.0, 0.0] }
+    }
+  },
+  "conditions": {
+    "skyboxes": { "entries": ["minecraft:overworld"] }
+  }
+}

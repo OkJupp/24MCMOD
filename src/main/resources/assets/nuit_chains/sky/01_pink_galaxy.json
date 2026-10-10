@@ -7,12 +7,16 @@
     "sunSkyTint": false,
     "fog": {
       "modifyColors": true,
-      "red": 0.32,
-      "green": 0.10,
-      "blue": 0.36
+      "red": 0.17,
+      "green": 0.05,
+      "blue": 0.2
     }
   },
   "conditions": {
-    "skyboxes": { "entries": ["minecraft:overworld"] }
+    "skyboxes": {
+      "entries": [
+        "minecraft:overworld"
+      ]
+    }
   }
 }
