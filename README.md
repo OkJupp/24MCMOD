@@ -38,7 +38,7 @@ Wichtige Werte in `05_chains.json` → `chains`:
 | `chance` | Anteil der Rasterfelder mit Kette (0–1) | 0.55 |
 | `cellRadius` | Wie viele Felder rundum sichtbar sind (mehr = mehr Ketten, mehr Leistung) | 2 |
 | `topY` | Aufhänge-Höhe | 420 |
-| `minLength` / `maxLength` | Kettenlänge | 150 / 280 |
+| `minLength` / `maxLength` | Kettenlänge | 90 / 190 |
 | `linkLength` / `linkWidth` / `thickness` | Größe der Glieder | 11 / 7 / 1.45 |
 | `spikes` | Dornen pro Seite eines Glieds (0 = glatt) | 2 |
 | `lean` | Maximale Schräglage einer Kette (Grad) | 14 |
@@ -49,7 +49,9 @@ Wichtige Werte in `05_chains.json` → `chains`:
 
 Unter `damage`: `brokenChance` (Anteil zerfallender Ketten), `brokenLinks` (wie viele Glieder am Ende zerfallen), `wear` / `wearStrength` (Anteil und Größe der Einschläge entlang der ganzen Kette), `fragments` / `fragmentFall` (Kristall-Splitter unter dem Ende).
 
-Unter `variation`: `sizeMin` / `sizeMax` (Größenbereich der Ketten), `giantChance` / `giantSize` (seltene Riesen-Ketten), `topYVariation` (wie stark die Aufhängehöhe schwankt).
+Unter `variation`: `sizeMin` / `sizeMax` (Größenbereich der Ketten), `giantChance` / `giantSize` (seltene Riesen-Ketten), `topYVariation` (wie stark die Aufhängehöhe schwankt), `minBottomY` (tiefster Punkt, bis zu dem eine Kette hängen darf – Standard 230).
+
+Unter `motion`: `windStrength` / `windSpeed` (gemeinsame, weiche Windböen für alle Ketten), `torsionDegrees` / `torsionSpeed` (Ketten drehen sich langsam um sich selbst), `emberPulse` (wie stark die glühenden Bruchkanten pulsieren).
 
 Weitere Schalter: `hideClouds` (Vanilla-Wolken **und** die LOD-Wolken von Distant Horizons aus, Standard `true` – deine DH-Einstellungsdatei bleibt dabei unverändert), `nearDistance` (bis zu dieser Entfernung sind Ketten echte 3D-Objekte in der Welt, Standard 220).
 

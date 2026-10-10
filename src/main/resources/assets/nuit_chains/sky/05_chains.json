@@ -13,8 +13,8 @@
     "chance": 0.55,
     "cellRadius": 2,
     "topY": 420,
-    "minLength": 150,
-    "maxLength": 280,
+    "minLength": 90,
+    "maxLength": 190,
     "linkLength": 11.0,
     "linkWidth": 7.0,
     "thickness": 1.45,
@@ -39,7 +39,15 @@
     "sizeMax": 1.3,
     "giantChance": 0.12,
     "giantSize": 2.4,
-    "topYVariation": 90
+    "topYVariation": 90,
+    "minBottomY": 230
+  },
+  "motion": {
+    "windStrength": 3.5,
+    "windSpeed": 1.0,
+    "torsionDegrees": 28,
+    "torsionSpeed": 1.0,
+    "emberPulse": 0.35
   },
   "properties": {
     "layer": 5

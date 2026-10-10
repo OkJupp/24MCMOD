@@ -78,7 +78,9 @@ public class LightningSkybox extends AbstractSkybox implements SkyboxTextureProv
 
         float flash = 0F;
         for (LightningGeometry.Strike strike : strikes) {
-            List<List<double[]>> bolts = this.geometry.shape(strike.hash());
+            LightningGeometry.Shape shape = this.geometry.shape(strike.hash());
+            List<List<double[]>> bolts = shape.bolts();
+            double grow = LightningGeometry.growth(strike.age());
             float glow = (float) strike.glowIntensity();
             float bolt = (float) strike.boltIntensity();
             flash = Math.max(flash, glow);
@@ -97,10 +99,15 @@ public class LightningSkybox extends AbstractSkybox implements SkyboxTextureProv
                     int quads = 0;
                     for (int i = 1; i < bolts.size(); i++) quads += bolts.get(i).size();
                     draw(pipeline, modelView, quads, sink -> {
-                        for (int i = 1; i < bolts.size(); i++) this.geometry.ribbon(bolts.get(i), 0.55, 0.12, sink);
+                        for (int i = 1; i < bolts.size(); i++) {
+                            // Verzweigung wächst los, sobald der Hauptblitz dort angekommen ist
+                            double sf = shape.startFrac()[i];
+                            double g = grow >= 1 ? 1 : Math.max(0, (grow - sf) / Math.max(0.05, 1 - sf));
+                            this.geometry.ribbon(bolts.get(i), 0.55, 0.12, g, sink);
+                        }
                     }, bolt * 0.7F);
                 }
-                draw(pipeline, modelView, bolts.get(0).size(), sink -> this.geometry.ribbon(bolts.get(0), 1.0, 0.45, sink), bolt);
+                draw(pipeline, modelView, bolts.get(0).size(), sink -> this.geometry.ribbon(bolts.get(0), 1.0, 0.45, grow, sink), bolt);
             }
         }
         currentFlash = flash;

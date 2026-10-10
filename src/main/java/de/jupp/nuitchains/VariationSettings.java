@@ -11,16 +11,18 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
  * @param giantChance   Anteil riesiger Ketten (0–1), die noch größer als sizeMax sind
  * @param giantSize     Größe dieser Riesen-Ketten
  * @param topYVariation Wie viele Blöcke die Aufhängehöhe nach oben/unten abweichen darf
+ * @param minBottomY    Tiefster Punkt, bis zu dem eine Kette herunterhängen darf (Y-Höhe)
  */
-public record VariationSettings(float sizeMin, float sizeMax, float giantChance, float giantSize, float topYVariation) {
+public record VariationSettings(float sizeMin, float sizeMax, float giantChance, float giantSize, float topYVariation, float minBottomY) {
 
-    public static final VariationSettings DEFAULT = new VariationSettings(0.55F, 1.3F, 0.12F, 2.4F, 90F);
+    public static final VariationSettings DEFAULT = new VariationSettings(0.55F, 1.3F, 0.12F, 2.4F, 90F, 230F);
 
     public static final Codec<VariationSettings> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.floatRange(0.1F, 10F).optionalFieldOf("sizeMin", DEFAULT.sizeMin()).forGetter(VariationSettings::sizeMin),
             Codec.floatRange(0.1F, 10F).optionalFieldOf("sizeMax", DEFAULT.sizeMax()).forGetter(VariationSettings::sizeMax),
             Codec.floatRange(0F, 1F).optionalFieldOf("giantChance", DEFAULT.giantChance()).forGetter(VariationSettings::giantChance),
             Codec.floatRange(0.1F, 20F).optionalFieldOf("giantSize", DEFAULT.giantSize()).forGetter(VariationSettings::giantSize),
-            Codec.floatRange(0F, 2000F).optionalFieldOf("topYVariation", DEFAULT.topYVariation()).forGetter(VariationSettings::topYVariation)
+            Codec.floatRange(0F, 2000F).optionalFieldOf("topYVariation", DEFAULT.topYVariation()).forGetter(VariationSettings::topYVariation),
+            Codec.floatRange(-64F, 4000F).optionalFieldOf("minBottomY", DEFAULT.minBottomY()).forGetter(VariationSettings::minBottomY)
     ).apply(i, VariationSettings::new));
 }

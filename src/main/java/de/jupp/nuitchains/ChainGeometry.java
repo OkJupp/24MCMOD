@@ -33,6 +33,7 @@ public final class ChainGeometry {
     private final ChainSettings s;
     private final DamageSettings dmg;
     private final VariationSettings var;
+    private final MotionSettings mot;
     private final LinkMesh meshNear;
     private final LinkMesh meshMid;
     private final LinkMesh meshFar;
@@ -41,10 +42,11 @@ public final class ChainGeometry {
     private final List<Part> parts = new ArrayList<>();
     private long[] partOrder = new long[64];
 
-    public ChainGeometry(ChainSettings settings, DamageSettings damage, VariationSettings variation) {
+    public ChainGeometry(ChainSettings settings, DamageSettings damage, VariationSettings variation, MotionSettings motion) {
         this.s = settings;
         this.dmg = damage;
         this.var = variation;
+        this.mot = motion;
         this.meshNear = new LinkMesh(settings, 16, 14, 10);
         this.meshMid = new LinkMesh(settings, 9, 9, 6);
         this.meshFar = new LinkMesh(settings, 5, 6, 4);
@@ -81,6 +83,21 @@ public final class ChainGeometry {
     /** Zwei Oktaven Rauschen – organischere Bruchkanten. */
     static double fbm(double x, double y, double z, long seed) {
         return (noise(x, y, z, seed) * 0.65 + noise(x * 2.3 + 7.1, y * 2.3, z * 2.3, seed ^ 0x5DEECE66DL) * 0.35);
+    }
+
+    /** Glattes 1D-Rauschen (-1..1), zweimal stetig differenzierbar – für weiche Bewegungen ohne Ruckeln. */
+    static double noise1(double x, long seed) {
+        long xi = (long) Math.floor(x);
+        double f = x - xi;
+        double w = f * f * f * (f * (f * 6 - 15) + 10);
+        double a = (mix(seed ^ (xi * 0x632BE59BD9B4E019L)) >>> 11) * 0x1.0p-53;
+        double b = (mix(seed ^ ((xi + 1) * 0x632BE59BD9B4E019L)) >>> 11) * 0x1.0p-53;
+        return (a + (b - a) * w) * 2 - 1;
+    }
+
+    /** Mehrere Oktaven 1D-Rauschen – unregelmäßige, aber weiche Böen. */
+    static double gust(double x, long seed) {
+        return noise1(x, seed) * 0.6 + noise1(x * 2.1 + 3.7, seed ^ 0x1234567L) * 0.28 + noise1(x * 4.3 + 9.1, seed ^ 0x7654321L) * 0.12;
     }
 
     private static double smooth(double a, double b, double x) {
@@ -127,12 +144,14 @@ public final class ChainGeometry {
                 double scale;
                 if (rnd(h, 12) < var.giantChance()) {
                     scale = var.giantSize() * (0.85 + 0.3 * rnd(h, 13));
-                    len *= 1.35;                                   // Riesen hängen auch länger
+                    len *= 1.1;                                    // Riesen hängen etwas länger
                 } else {
                     double t = rnd(h, 13);
                     scale = var.sizeMin() + (var.sizeMax() - var.sizeMin()) * t;
                 }
                 double topY = s.topY() + (rnd(h, 14) * 2 - 1) * var.topYVariation() + (scale - 1) * 60;
+                // nie tiefer als minBottomY hängen
+                len = Math.max(Math.min(40, len), Math.min(len, topY - var.minBottomY()));
                 double leanA = rnd(h, 8) * Math.PI * 2;
                 double leanM = Math.toRadians(s.lean()) * (0.25 + 0.75 * rnd(h, 9));
                 double leanX = Math.sin(leanM) * Math.cos(leanA), leanZ = Math.sin(leanM) * Math.sin(leanA);
@@ -170,6 +189,7 @@ public final class ChainGeometry {
         double glow;
         boolean hit;      // Einschlag statt Zerfall
         double scale = 1; // Größe des Glieds
+        double pulse = 1; // Glühen der Bruchkanten (pulsiert)
         float alpha;      // oben ausblenden
     }
 
@@ -194,22 +214,43 @@ public final class ChainGeometry {
         double scale = c.scale();
         double pitch = pitch() * scale;
         double swing = Math.toRadians(s.swingDegrees());
-        double period = (8.0 + c.length() / 25.0) / Math.max(0.05, s.swingSpeed());
+        // schwere, lange Ketten schwingen langsamer
+        double period = (9.0 + c.length() / 22.0) * Math.sqrt(scale) / Math.max(0.05, s.swingSpeed());
         double w1 = 2 * Math.PI / period;
-        double w2 = w1 * 0.73;
+        double w2 = w1 * 0.618;                                  // goldener Schnitt: wiederholt sich nie sichtbar
         double ca = Math.cos(c.swingAxis()), sa = Math.sin(c.swingAxis());
-        double waveDelay = s.wave() * period * 0.25 / Math.max(1, c.links());
+        double lagTotal = s.wave() * period * 0.35;              // so lange braucht eine Bewegung bis nach unten
+        double windAmp = Math.toRadians(mot.windStrength());
+        double windRate = 0.07 * mot.windSpeed();
+        long windSeed = mix((long) s.seed() * 0x2545F4914F6CDD1DL);
+        double response = 0.7 + 0.6 * rnd(c.hash(), 80);         // jede Kette fängt den Wind etwas anders
+        double torsion = Math.toRadians(mot.torsionDegrees());
+        double torsionT = timeSec * 0.045 * mot.torsionSpeed() / Math.sqrt(scale);
+        double torsionNow = torsion * (0.65 * Math.sin(torsionT * 2 * Math.PI + c.phase2()) + 0.35 * noise1(torsionT * 1.7, c.hash()));
+        double pulseBase = mot.emberPulse();
 
         int nLinks = c.links();
         int nParts = 0;
         double px = c.ax(), py = c.ay(), pz = c.az();
         double lastUx = 0, lastUy = -1, lastUz = 0;
         for (int i = 0; i < nLinks; i++) {
-            double t = timeSec - i * waveDelay;
+            double f = nLinks > 1 ? i / (double) (nLinks - 1) : 0;   // 0 oben … 1 unten
+            double t = timeSec - f * lagTotal;
+            // eigenes Pendeln (zwei sanfte Schwingungen)
             double th1 = swing * Math.sin(w1 * t + c.phase1());
             double th2 = 0.35 * swing * Math.sin(w2 * t + c.phase2());
-            double ux = c.leanX() + Math.sin(th1) * ca - Math.sin(th2) * sa;
-            double uz = c.leanZ() + Math.sin(th1) * sa + Math.sin(th2) * ca;
+            double sx = Math.sin(th1) * ca - Math.sin(th2) * sa;
+            double sz = Math.sin(th1) * sa + Math.sin(th2) * ca;
+            // gemeinsamer Wind: langsam drehende Richtung, weiche Böen
+            double wt = t * windRate;
+            double windDir = noise1(wt * 0.25, windSeed) * Math.PI;
+            double windMag = windAmp * response * (0.55 + 0.45 * gust(wt, windSeed ^ 0x55L));
+            sx += Math.sin(windMag) * Math.cos(windDir);
+            sz += Math.sin(windMag) * Math.sin(windDir);
+            // unten schwingt es etwas weiter aus als oben
+            double reach = 0.6 + 0.4 * f;
+            double ux = c.leanX() + sx * reach;
+            double uz = c.leanZ() + sz * reach;
             double uy = -Math.sqrt(Math.max(0.0001, 1 - ux * ux - uz * uz));
             double ul = Math.sqrt(ux * ux + uy * uy + uz * uz);
             ux /= ul; uy /= ul; uz /= ul;
@@ -218,12 +259,13 @@ public final class ChainGeometry {
             Part p = part(nParts++);
             p.shard = false;
             p.scale = scale;
+            p.pulse = 1.0 - pulseBase * 0.5 + pulseBase * 0.5 * Math.sin(timeSec * (1.6 + rnd(c.hash(), 300 + i) * 1.2) + rnd(c.hash(), 400 + i) * 6.283);
             p.cx = px + ux * pitch * 0.5 - ex;
             p.cy = py + uy * pitch * 0.5 - ey;
             p.cz = pz + uz * pitch * 0.5 - ez;
             px += ux * pitch; py += uy * pitch; pz += uz * pitch;
 
-            double tw = c.twist() + (i & 1) * Math.PI * 0.5 + (rnd(c.hash(), 100 + i) - 0.5) * 0.12;
+            double tw = c.twist() + (i & 1) * Math.PI * 0.5 + (rnd(c.hash(), 100 + i) - 0.5) * 0.12 + torsionNow * f;
             double rx = Math.cos(tw), rz = Math.sin(tw);
             double d = rx * ux + rz * uz;
             double wx = rx - ux * d, wy = -uy * d, wz = rz - uz * d;
@@ -240,8 +282,8 @@ public final class ChainGeometry {
             if (c.broken()) {
                 int fromEnd = nLinks - 1 - i;
                 if (fromEnd < c.brokenLinks()) {
-                    double f = 1.0 - fromEnd / (double) c.brokenLinks();
-                    damage = 0.22 + 0.6 * f * f;
+                    double fe = 1.0 - fromEnd / (double) c.brokenLinks();
+                    damage = 0.22 + 0.6 * fe * fe;
                 }
             }
             // Einschläge überall entlang der Kette (nicht im ausgeblendeten oberen Teil)
@@ -267,7 +309,9 @@ public final class ChainGeometry {
                 if (life01 < 0.04) continue;
                 double ang = rnd(fh, 4) * Math.PI * 2;
                 double rad = s.linkWidth() * scale * (0.15 + 0.9 * rnd(fh, 5)) * (0.3 + age);
-                double fall = dmg.fragmentFall() * scale * age * (0.5 + rnd(fh, 6)) + s.linkLength() * scale * 0.2;
+                // sanft beschleunigend fallen, leicht seitlich treiben
+                double fall = dmg.fragmentFall() * scale * (0.35 * age + 0.65 * age * age) * (0.5 + rnd(fh, 6)) + s.linkLength() * scale * 0.2;
+                ang += 0.6 * Math.sin(age * 3.0 + rnd(fh, 15) * 6.28) * age;
                 Part p = part(nParts++);
                 p.shard = true;
                 p.cx = px + Math.cos(ang) * rad + lastUx * fall - ex;
@@ -305,8 +349,8 @@ public final class ChainGeometry {
                 count += emitShard(p, sink);
             } else {
                 double ld2 = d2 / (p.scale * p.scale);           // große Glieder behalten Details länger
-                LinkMesh mesh = ld2 < 230 * 230 ? (p.damage > 0.001 && ld2 < 120 * 120 ? this.meshDamaged : this.meshNear)
-                        : ld2 < 480 * 480 ? this.meshMid : this.meshFar;
+                LinkMesh mesh = ld2 < 260 * 260 ? (p.damage > 0.001 ? this.meshDamaged : this.meshNear)
+                        : ld2 < 520 * 520 ? this.meshMid : this.meshFar;
                 count += mesh.emit(p, sink);
             }
         }
@@ -557,7 +601,7 @@ public final class ChainGeometry {
                     glow = Math.min(1, Math.max(0, (d + 0.11 - nz[idx]) / 0.11));
                     glow = glow * glow * (3 - 2 * glow);
                 }
-                vU[idx] = (float) (0.02 + 0.96 * glow);
+                vU[idx] = (float) (0.02 + 0.96 * glow * p.pulse);
                 vx[idx] = (float) x; vy[idx] = (float) y; vz[idx] = (float) z;
             }
 
@@ -588,7 +632,7 @@ public final class ChainGeometry {
                     int vi = quads[q * 4 + t];
                     qxyz[t * 3] = vx[vi]; qxyz[t * 3 + 1] = vy[vi]; qxyz[t * 3 + 2] = vz[vi];
                     // Innenseite eines aufgebrochenen Glieds: glühender Kern
-                    quv[t * 2] = inside ? 0.9F : vU[vi];
+                    quv[t * 2] = inside ? (float) (0.9 * p.pulse) : vU[vi];
                     quv[t * 2 + 1] = inside ? 0.45F : vV[vi];
                 }
                 sink.quad(qxyz, quv, p.alpha);

@@ -19,7 +19,17 @@ public final class LightningGeometry {
     }
 
     /** Ein Blitz, der gerade sichtbar ist. */
-    public record Strike(long hash, double boltIntensity, double glowIntensity) {
+    public record Strike(long hash, double boltIntensity, double glowIntensity, double age) {
+    }
+
+    /** Form eines Blitzes: Index 0 = Hauptblitz, danach Verzweigungen; startFrac = wo am Hauptblitz sie abzweigen (0..1). */
+    public record Shape(List<List<double[]>> bolts, double[] startFrac) {
+    }
+
+    /** Wie weit der Blitz schon "gewachsen" ist (0..1): er schießt in ~70 ms von oben nach unten. */
+    public static double growth(double age) {
+        double g = Math.min(1, Math.max(0, age / 0.07));
+        return 1 - (1 - g) * (1 - g);
     }
 
     public static final double R = 80.0;
@@ -64,7 +74,7 @@ public final class LightningGeometry {
                 glow = Math.max(glow, amp * (0.75 * Math.exp(-dt / 0.07) + 0.25 * Math.exp(-dt / 0.3)));
             }
         }
-        if (glow > 0.01) out.add(new Strike(h, bolt, glow));
+        if (glow > 0.01) out.add(new Strike(h, bolt, glow, lt));
     }
 
     // ------------------------------------------------------------------ Form
@@ -107,7 +117,7 @@ public final class LightningGeometry {
     }
 
     /** Hauptblitz (Index 0) und Verzweigungen. */
-    public List<List<double[]>> shape(long h) {
+    public Shape shape(long h) {
         double az = ChainGeometry.rnd(h, 40) * Math.PI * 2;
         double e0 = Math.toRadians(s.minElevation() + (s.maxElevation() - s.minElevation()) * ChainGeometry.rnd(h, 41));
         double len = Math.toRadians(s.length() * (0.7 + 0.6 * ChainGeometry.rnd(h, 42)));
@@ -118,6 +128,7 @@ public final class LightningGeometry {
         bolts.add(main);
         int n = main.size();
         int nb = (int) Math.round(s.branches() * (0.3 + 0.7 * ChainGeometry.rnd(h, 44)));
+        double[] startFrac = new double[nb + 1];
         for (int k = 0; k < nb; k++) {
             int idx = (int) (n * (0.15 + 0.6 * ChainGeometry.rnd(h, 50 + k)));
             idx = Math.max(1, Math.min(n - 2, idx));
@@ -132,8 +143,9 @@ public final class LightningGeometry {
                     p[1] + (t[1] * 0.75 + side[1] * 0.65 * sign) * bl,
                     p[2] + (t[2] * 0.75 + side[2] * 0.65 * sign) * bl});
             bolts.add(zigzag(p, end, 4, 0.38, h, 1000 + k * 100));
+            startFrac[k + 1] = idx / (double) (n - 1);
         }
-        return bolts;
+        return new Shape(bolts, startFrac);
     }
 
     // ------------------------------------------------------------------ Ausgabe
@@ -143,6 +155,24 @@ public final class LightningGeometry {
 
     /** Blitz als Band, das immer zur Kamera zeigt. Breite nimmt zum Ende hin ab. */
     public void ribbon(List<double[]> pts, double startWidth, double endWidth, QuadSink sink) {
+        ribbon(pts, startWidth, endWidth, 1.0, sink);
+    }
+
+    /** Wie {@link #ribbon(List, double, double, QuadSink)}, aber nur der vordere Anteil {@code grown} (0..1) – für das Wachsen. */
+    public void ribbon(List<double[]> all, double startWidth, double endWidth, double grown, QuadSink sink) {
+        if (grown <= 0) return;
+        List<double[]> pts = all;
+        if (grown < 1) {
+            double pos = grown * (all.size() - 1);
+            int k = (int) Math.floor(pos);
+            double t = pos - k;
+            pts = new ArrayList<>(all.subList(0, k + 1));
+            if (k + 1 < all.size() && t > 1e-3) {
+                double[] a = all.get(k), b = all.get(k + 1);
+                pts.add(norm(new double[]{a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t}));
+            }
+            if (pts.size() < 2) return;
+        }
         int n = pts.size();
         double[][] left = new double[n][], right = new double[n][];
         for (int i = 0; i < n; i++) {
@@ -150,7 +180,7 @@ public final class LightningGeometry {
             double[] a = pts.get(Math.max(0, i - 1)), b = pts.get(Math.min(n - 1, i + 1));
             double[] t = new double[]{b[0] - a[0], b[1] - a[1], b[2] - a[2]};
             double[] side = norm(cross(p, t));
-            double f = i / (double) (n - 1);
+            double f = i / (double) (all.size() - 1);
             double hw = (startWidth + (endWidth - startWidth) * f) * s.width();
             left[i] = new double[]{p[0] * R - side[0] * hw, p[1] * R - side[1] * hw, p[2] * R - side[2] * hw};
             right[i] = new double[]{p[0] * R + side[0] * hw, p[1] * R + side[1] * hw, p[2] * R + side[2] * hw};

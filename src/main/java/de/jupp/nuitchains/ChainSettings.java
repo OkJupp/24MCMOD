@@ -30,7 +30,7 @@ public record ChainSettings(int spacing, float chance, int cellRadius, float top
 
     public static final ChainSettings DEFAULT = new ChainSettings(
             220, 0.55F, 2, 420F,
-            150F, 280F, 11.0F, 7.0F,
+            90F, 190F, 11.0F, 7.0F,
             1.45F, 14F, 2, 90F, 3.0F, 1.0F, 0.6F, 2424);
 
     public static final Codec<ChainSettings> CODEC = RecordCodecBuilder.create(i -> i.group(
