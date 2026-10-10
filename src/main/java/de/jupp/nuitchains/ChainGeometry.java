@@ -2,17 +2,19 @@ package de.jupp.nuitchains;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 
 /**
  * Reine Mathe ohne Minecraft-Abhängigkeiten: berechnet, wo die Ketten hängen, wie sie pendeln,
- * wo sie kaputt sind, und erzeugt Kettenglieder und Bruchstücke als Vierecke.
+ * wo sie zerfallen, und erzeugt Kettenglieder (glatte Rohre mit Dornen) und Kristall-Splitter
+ * als Vierecke.
  * <p>
- * Alle Positionen werden relativ zur Kamera ausgegeben (echte Abstände). Die Vierecke kommen
- * pro Kette von hinten nach vorne sortiert heraus.
+ * Alle Positionen werden relativ zur Kamera ausgegeben (echte Abstände), pro Kette von hinten
+ * nach vorne sortiert.
  * <p>
- * Textur-Atlas (u-Bereiche): 0.00–0.50 Metall (v = Helligkeit), 0.50–0.75 glühende Bruchkante,
- * 0.75–1.00 glühender Kern (Innenseite aufgebrochener Glieder).
+ * Textur: v = Helligkeit (0 hell, 1 dunkel), u = Glühen (0 Kristall/Metall, 1 glühende Bruchstelle).
+ * Beides wird pro Ecke berechnet und von der Grafikkarte weich überblendet.
  */
 public final class ChainGeometry {
 
@@ -28,28 +30,26 @@ public final class ChainGeometry {
                         double fade, double distance) {
     }
 
-    private static final double U_EDGE = 0.625;
-    private static final double U_CORE = 0.875;
-
     private final ChainSettings s;
     private final DamageSettings dmg;
-    private final LinkMesh hiDetail;
-    private final LinkMesh loDetail;
-    private final LinkMesh damageDetail;
+    private final LinkMesh meshNear;
+    private final LinkMesh meshMid;
+    private final LinkMesh meshFar;
+    private final LinkMesh meshDamaged;
 
-    // wiederverwendete Puffer
     private final List<Part> parts = new ArrayList<>();
     private long[] partOrder = new long[64];
 
     public ChainGeometry(ChainSettings settings, DamageSettings damage) {
         this.s = settings;
         this.dmg = damage;
-        this.hiDetail = new LinkMesh(settings, 9, 10);
-        this.loDetail = new LinkMesh(settings, 5, 6);
-        this.damageDetail = new LinkMesh(settings, 14, 14);
+        this.meshNear = new LinkMesh(settings, 16, 14, 10);
+        this.meshMid = new LinkMesh(settings, 9, 9, 6);
+        this.meshFar = new LinkMesh(settings, 5, 6, 4);
+        this.meshDamaged = new LinkMesh(settings, 30, 22, 10);
     }
 
-    // ------------------------------------------------------------------ Zufall
+    // ------------------------------------------------------------------ Zufall & Rauschen
 
     static long mix(long z) {
         z = (z ^ (z >>> 30)) * 0xbf58476d1ce4e5b9L;
@@ -61,7 +61,7 @@ public final class ChainGeometry {
         return (mix(h + n * 0x9E3779B97F4A7C15L) >>> 11) * 0x1.0p-53;
     }
 
-    /** Glatter 3D-Wertrauschen (0..1), für Löcher und Bruchkanten. */
+    /** Glattes 3D-Wertrauschen (0..1). */
     static double noise(double x, double y, double z, long seed) {
         long xi = (long) Math.floor(x), yi = (long) Math.floor(y), zi = (long) Math.floor(z);
         double xf = x - xi, yf = y - yi, zf = z - zi;
@@ -76,9 +76,28 @@ public final class ChainGeometry {
         return r;
     }
 
+    /** Zwei Oktaven Rauschen – organischere Bruchkanten. */
+    static double fbm(double x, double y, double z, long seed) {
+        return (noise(x, y, z, seed) * 0.65 + noise(x * 2.3 + 7.1, y * 2.3, z * 2.3, seed ^ 0x5DEECE66DL) * 0.35);
+    }
+
     private static double smooth(double a, double b, double x) {
         double t = Math.min(1, Math.max(0, (x - a) / (b - a)));
         return t * t * (3 - 2 * t);
+    }
+
+    /**
+     * Helligkeit 0..1 für ein glasiges Kristall-Metall: weiches Licht von oben,
+     * helle Ränder (Fresnel) und ein kleiner Glanzpunkt.
+     */
+    static double shade(double normalY, double nDotView) {
+        double lam = 0.5 + 0.5 * normalY;
+        double edge = 1 - Math.abs(nDotView);
+        double fres = edge * edge * Math.sqrt(edge);
+        double f = Math.max(0, nDotView);
+        double f2 = f * f, f4 = f2 * f2, spec = f4 * f4 * f4;
+        double l = 0.10 + 0.25 * lam + 0.72 * fres + 0.15 * spec;
+        return Math.min(0.995, Math.max(0.005, l));
     }
 
     // ------------------------------------------------------------------ Platzierung
@@ -106,7 +125,6 @@ public final class ChainGeometry {
                 double leanA = rnd(h, 8) * Math.PI * 2;
                 double leanM = Math.toRadians(s.lean()) * (0.25 + 0.75 * rnd(h, 9));
                 double leanX = Math.sin(leanM) * Math.cos(leanA), leanZ = Math.sin(leanM) * Math.sin(leanA);
-                // Mittelpunkt der Kette für Abstand/Ausblenden
                 double mx = ax + leanX * len * 0.5, mz = az + leanZ * len * 0.5, my = s.topY() - len * 0.5;
                 double dx = mx - ex, dz = mz - ez;
                 double horiz = Math.sqrt(dx * dx + dz * dz);
@@ -130,14 +148,15 @@ public final class ChainGeometry {
 
     // ------------------------------------------------------------------ Aufbau einer Kette
 
-    /** Ein Teil der Kette: Glied oder Bruchstück. */
+    /** Ein Teil der Kette: Glied oder Splitter. */
     private static final class Part {
-        boolean fragment;
-        double cx, cy, cz;                 // Mittelpunkt relativ zur Kamera
-        double ux, uy, uz, wx, wy, wz, nx, ny, nz; // Achsen
-        double damage;                      // 0 = heil, 1 = fast weg
+        boolean shard;
+        double cx, cy, cz;
+        double ux, uy, uz, wx, wy, wz, nx, ny, nz;
+        double damage;
         long seed;
-        double sx, sy, sz;                  // Bruchstück-Größe
+        double sx, sy, sz;
+        double glow;
     }
 
     private Part part(int idx) {
@@ -145,22 +164,18 @@ public final class ChainGeometry {
         return this.parts.get(idx);
     }
 
-    /**
-     * Erzeugt alle sichtbaren Vierecke einer Kette, von hinten nach vorne.
-     * Teile näher als {@code splitDistance} gehen an {@code nearSink} (echte 3D-Welt mit Tiefe),
-     * alle anderen an {@code farSink} (Himmel).
-     *
-     * @param timeSec Zeit in Sekunden (Spielzeit inkl. Teil-Tick)
-     * @return Anzahl ausgegebener Vierecke
-     */
     public int build(Chain c, double ex, double ey, double ez, double timeSec, QuadSink sink) {
         return build(c, ex, ey, ez, timeSec, sink, sink, 0);
     }
 
+    /**
+     * Erzeugt alle sichtbaren Vierecke einer Kette, von hinten nach vorne.
+     * Teile näher als {@code splitDistance} gehen an {@code nearSink} (echte 3D-Welt mit Tiefe),
+     * alle anderen an {@code farSink} (Himmel).
+     */
     public int build(Chain c, double ex, double ey, double ez, double timeSec,
                      QuadSink farSink, QuadSink nearSink, double splitDistance) {
         double split2 = splitDistance * splitDistance;
-        LinkMesh mesh = c.distance() > 320 ? loDetail : hiDetail;
         double pitch = pitch();
         double swing = Math.toRadians(s.swingDegrees());
         double period = (8.0 + c.length() / 25.0) / Math.max(0.05, s.swingSpeed());
@@ -185,13 +200,13 @@ public final class ChainGeometry {
             lastUx = ux; lastUy = uy; lastUz = uz;
 
             Part p = part(nParts++);
-            p.fragment = false;
+            p.shard = false;
             p.cx = px + ux * pitch * 0.5 - ex;
             p.cy = py + uy * pitch * 0.5 - ey;
             p.cz = pz + uz * pitch * 0.5 - ez;
             px += ux * pitch; py += uy * pitch; pz += uz * pitch;
 
-            double tw = c.twist() + (i & 1) * Math.PI * 0.5 + (rnd(c.hash(), 100 + i) - 0.5) * 0.25;
+            double tw = c.twist() + (i & 1) * Math.PI * 0.5 + (rnd(c.hash(), 100 + i) - 0.5) * 0.12;
             double rx = Math.cos(tw), rz = Math.sin(tw);
             double d = rx * ux + rz * uz;
             double wx = rx - ux * d, wy = -uy * d, wz = rz - uz * d;
@@ -203,13 +218,12 @@ public final class ChainGeometry {
             p.nz = p.ux * p.wy - p.uy * p.wx;
             p.seed = mix(c.hash() + i * 0x9E3779B97F4A7C15L);
 
-            // Schaden: Zerfall am Ende + zufällige Abplatzer
             double damage = 0;
             if (c.broken()) {
                 int fromEnd = nLinks - 1 - i;
                 if (fromEnd < c.brokenLinks()) {
-                    double f = 1.0 - fromEnd / (double) c.brokenLinks(); // 0..1 zum Ende hin
-                    damage = 0.12 + 0.7 * f * f;
+                    double f = 1.0 - fromEnd / (double) c.brokenLinks();
+                    damage = 0.22 + 0.6 * f * f;
                 }
             }
             if (rnd(p.seed, 1) < dmg.wear()) {
@@ -218,37 +232,35 @@ public final class ChainGeometry {
             p.damage = damage;
         }
 
-        // Bruchstücke unter einem zerfallenden Ende
+        // Kristall-Splitter unter einem zerfallenden Ende
         if (c.broken() && dmg.fragments() > 0) {
-            double size = s.thickness() * 0.8;
-            double life = 9.0;
+            double size = s.thickness() * 1.1;
+            double life = 10.0;
             for (int k = 0; k < dmg.fragments(); k++) {
                 long fh = mix(c.hash() ^ (k * 0xD1B54A32D192ED03L));
                 double age = (timeSec / (life * (0.7 + 0.6 * rnd(fh, 1))) + rnd(fh, 2)) % 1.0;
-                double scale = (1 - age * age) * (0.35 + 0.9 * rnd(fh, 3));
-                if (scale < 0.05) continue;
+                double scale = Math.min(1, age * 8) * (1 - age * age) * (0.35 + 0.8 * rnd(fh, 3));
+                if (scale < 0.04) continue;
                 double ang = rnd(fh, 4) * Math.PI * 2;
-                double rad = s.linkWidth() * (0.3 + 1.4 * rnd(fh, 5)) * (0.4 + age);
-                double fall = dmg.fragmentFall() * age * (0.5 + rnd(fh, 6));
+                double rad = s.linkWidth() * (0.15 + 0.9 * rnd(fh, 5)) * (0.3 + age);
+                double fall = dmg.fragmentFall() * age * (0.5 + rnd(fh, 6)) + s.linkLength() * 0.2;
                 Part p = part(nParts++);
-                p.fragment = true;
-                p.cx = px + Math.cos(ang) * rad + lastUx * (fall + s.linkLength() * 0.3) - ex;
-                p.cy = py + lastUy * (fall + s.linkLength() * 0.3) - ey;
-                p.cz = pz + Math.sin(ang) * rad + lastUz * (fall + s.linkLength() * 0.3) - ez;
-                // zufällige, sich drehende Ausrichtung
-                double spin = timeSec * (0.4 + rnd(fh, 7)) + rnd(fh, 8) * 6.3;
+                p.shard = true;
+                p.cx = px + Math.cos(ang) * rad + lastUx * fall - ex;
+                p.cy = py + lastUy * fall - ey;
+                p.cz = pz + Math.sin(ang) * rad + lastUz * fall - ez;
+                double spin = timeSec * (0.3 + 0.8 * rnd(fh, 7)) + rnd(fh, 8) * 6.3;
                 double a1 = rnd(fh, 9) * Math.PI * 2, a2 = Math.acos(2 * rnd(fh, 10) - 1);
-                double kx = Math.sin(a2) * Math.cos(a1), ky = Math.cos(a2), kz = Math.sin(a2) * Math.sin(a1);
-                setRotation(p, kx, ky, kz, spin);
-                p.sx = size * scale * (0.6 + 0.8 * rnd(fh, 11));
-                p.sy = size * scale * (0.6 + 0.8 * rnd(fh, 12));
-                p.sz = size * scale * (0.4 + 0.6 * rnd(fh, 13));
+                setRotation(p, Math.sin(a2) * Math.cos(a1), Math.cos(a2), Math.sin(a2) * Math.sin(a1), spin);
+                p.sx = size * scale * (0.5 + 0.7 * rnd(fh, 11));
+                p.sy = size * scale * (1.2 + 1.6 * rnd(fh, 12)); // länglich wie Splitter
+                p.sz = size * scale * (0.4 + 0.5 * rnd(fh, 13));
+                p.glow = 0.35 + 0.65 * rnd(fh, 14);
                 p.seed = fh;
                 p.damage = 0;
             }
         }
 
-        // Teile von hinten nach vorne
         if (this.partOrder.length < nParts) this.partOrder = new long[nParts * 2];
         for (int i = 0; i < nParts; i++) {
             Part p = this.parts.get(i);
@@ -261,17 +273,17 @@ public final class ChainGeometry {
             Part p = this.parts.get((int) (this.partOrder[q] & 0xFFFFFFFFL));
             double d2 = p.cx * p.cx + p.cy * p.cy + p.cz * p.cz;
             QuadSink sink = d2 < split2 ? nearSink : farSink;
-            if (p.fragment) {
-                count += emitFragment(p, sink);
+            if (p.shard) {
+                count += emitShard(p, sink);
             } else {
-                boolean near = d2 < 180 * 180;
-                count += (p.damage > 0.001 && near ? this.damageDetail : (near ? this.hiDetail : mesh)).emit(p, sink);
+                LinkMesh mesh = d2 < 230 * 230 ? (p.damage > 0.001 && d2 < 120 * 120 ? this.meshDamaged : this.meshNear)
+                        : d2 < 480 * 480 ? this.meshMid : this.meshFar;
+                count += mesh.emit(p, sink);
             }
         }
         return count;
     }
 
-    /** Rotationsmatrix (Rodrigues) als Achsen U, W, N in den Part schreiben. */
     private static void setRotation(Part p, double kx, double ky, double kz, double a) {
         double c = Math.cos(a), s = Math.sin(a), t = 1 - c;
         p.ux = t * kx * kx + c;      p.uy = t * kx * ky + s * kz; p.uz = t * kx * kz - s * ky;
@@ -279,42 +291,53 @@ public final class ChainGeometry {
         p.nx = t * kx * kz + s * ky; p.ny = t * ky * kz - s * kx; p.nz = t * kz * kz + c;
     }
 
-    // ------------------------------------------------------------------ Bruchstück (verbeulter Würfel)
+    // ------------------------------------------------------------------ Kristall-Splitter (Oktaeder)
 
-    private static final int[][] BOX_FACES = {
-            {1, 3, 7, 5}, {0, 4, 6, 2}, {2, 6, 7, 3}, {0, 1, 5, 4}, {4, 5, 7, 6}, {0, 2, 3, 1}
+    private static final int[][] OCTA = {
+            {0, 2, 4}, {2, 1, 4}, {1, 3, 4}, {3, 0, 4}, {2, 0, 5}, {1, 2, 5}, {3, 1, 5}, {0, 3, 5}
     };
-    private static final double[][] BOX_NORMALS = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
     private final float[] fxyz = new float[12];
     private final float[] fuv = new float[8];
-    private final double[] corner = new double[24];
+    private final double[] corner = new double[18];
 
-    private int emitFragment(Part p, QuadSink sink) {
-        for (int k = 0; k < 8; k++) {
-            double jx = 0.45 + 1.1 * rnd(p.seed, 20 + k), jy = 0.45 + 1.1 * rnd(p.seed, 30 + k), jz = 0.45 + 1.1 * rnd(p.seed, 40 + k);
-            double lx = ((k & 1) == 1 ? 1 : -1) * p.sx * jx;
-            double ly = ((k & 2) == 2 ? 1 : -1) * p.sy * jy;
-            double lz = ((k & 4) == 4 ? 1 : -1) * p.sz * jz;
+    private int emitShard(Part p, QuadSink sink) {
+        double[][] local = {
+                {p.sx * (0.7 + 0.6 * rnd(p.seed, 20)), 0, 0}, {-p.sx * (0.7 + 0.6 * rnd(p.seed, 21)), 0, 0},
+                {0, p.sy * (0.7 + 0.6 * rnd(p.seed, 22)), 0}, {0, -p.sy * (0.7 + 0.6 * rnd(p.seed, 23)), 0},
+                {0, 0, p.sz}, {0, 0, -p.sz}
+        };
+        for (int k = 0; k < 6; k++) {
+            double lx = local[k][0], ly = local[k][1], lz = local[k][2];
             corner[k * 3] = p.cx + lx * p.ux + ly * p.wx + lz * p.nx;
             corner[k * 3 + 1] = p.cy + lx * p.uy + ly * p.wy + lz * p.ny;
             corner[k * 3 + 2] = p.cz + lx * p.uz + ly * p.wz + lz * p.nz;
         }
-        double dist = Math.sqrt(p.cx * p.cx + p.cy * p.cy + p.cz * p.cz);
-        int glowFace = (int) (rnd(p.seed, 50) * 6);
         int n = 0;
-        for (int f = 0; f < 6; f++) {
-            double[] ln = BOX_NORMALS[f];
-            double gx = ln[0] * p.ux + ln[1] * p.wx + ln[2] * p.nx;
-            double gy = ln[0] * p.uy + ln[1] * p.wy + ln[2] * p.ny;
-            double gz = ln[0] * p.uz + ln[1] * p.wz + ln[2] * p.nz;
-            double ndv = -(gx * p.cx + gy * p.cy + gz * p.cz) / dist;
-            if (ndv <= 0) continue;
-            double light = shade(gy, ndv);
-            double u = f == glowFace ? U_EDGE : 0.1 + 0.3 * rnd(p.seed, 60 + f);
+        for (int[] f : OCTA) {
+            int a = f[0] * 3, b = f[1] * 3, c = f[2] * 3;
+            double e1x = corner[b] - corner[a], e1y = corner[b + 1] - corner[a + 1], e1z = corner[b + 2] - corner[a + 2];
+            double e2x = corner[c] - corner[a], e2y = corner[c + 1] - corner[a + 1], e2z = corner[c + 2] - corner[a + 2];
+            double gx = e1y * e2z - e1z * e2y, gy = e1z * e2x - e1x * e2z, gz = e1x * e2y - e1y * e2x;
+            double gl = Math.sqrt(gx * gx + gy * gy + gz * gz);
+            if (gl < 1e-9) continue;
+            gx /= gl; gy /= gl; gz /= gl;
+            double mx = (corner[a] + corner[b] + corner[c]) / 3, my = (corner[a + 1] + corner[b + 1] + corner[c + 1]) / 3,
+                    mz = (corner[a + 2] + corner[b + 2] + corner[c + 2]) / 3;
+            double md = Math.sqrt(mx * mx + my * my + mz * mz);
+            double ndv = -(gx * mx + gy * my + gz * mz) / md;
+            if (ndv <= 0) {
+                // Seite zeigt weg; je nach Wicklung andersrum versuchen
+                gx = -gx; gy = -gy; gz = -gz; ndv = -ndv;
+                if (ndv <= 0) continue;
+            }
+            float v = (float) (1 - shade(gy, ndv));
+            int[] order = {f[0], f[1], f[2], f[2]};
             for (int t = 0; t < 4; t++) {
-                int ci = BOX_FACES[f][t] * 3;
+                int ci = order[t] * 3;
                 fxyz[t * 3] = (float) corner[ci]; fxyz[t * 3 + 1] = (float) corner[ci + 1]; fxyz[t * 3 + 2] = (float) corner[ci + 2];
-                fuv[t * 2] = (float) (u + (t == 1 || t == 2 ? 0.04 : 0)); fuv[t * 2 + 1] = (float) (1 - light);
+                double g = order[t] >= 4 ? p.glow : p.glow * 0.5;  // Spitzen glühen mehr
+                fuv[t * 2] = (float) (0.02 + 0.96 * g);
+                fuv[t * 2 + 1] = v;
             }
             sink.quad(fxyz, fuv);
             n++;
@@ -322,63 +345,64 @@ public final class ChainGeometry {
         return n;
     }
 
-    /** Helligkeit 0..1: Licht von oben + Glanz in Blickrichtung + Rand-Schimmer. */
-    static double shade(double normalY, double nDotView) {
-        double up = 0.35 * normalY + 0.65 * Math.max(0, normalY);
-        double f = Math.max(0, nDotView), rim = Math.max(0, 1 - Math.abs(nDotView));
-        rim *= rim;
-        double l = 0.16 + 0.42 * Math.max(0, up) + 0.36 * f * f * f + 0.3 * rim * rim;
-        return Math.min(0.995, Math.max(0.005, l));
-    }
+    // ------------------------------------------------------------------ Kettenglied mit Dornen
 
-    // ------------------------------------------------------------------ Kettenglied
-
-    /** Vorberechnetes Kettenglied (Stadion-förmiger Ring als dickes Rohr) in lokalen Koordinaten. */
+    /**
+     * Vorberechnetes Kettenglied: Stadion-förmiger Ring als glattes Rohr, plus Dornen (Kegel)
+     * an den Längsseiten. Lokale Achsen: U entlang der Kette (nach unten), W quer in der Ring-Ebene,
+     * N senkrecht zur Ring-Ebene.
+     */
     static final class LinkMesh {
-        final int m;  // Punkte entlang des Rings
-        final int k;  // Punkte um das Rohr
-        final double[] pu, pw, pn; // Position
-        final double[] nu, nw, nn; // Normale
+        final int m, k;              // Rohr: Punkte entlang des Rings / um das Rohr
+        final int nv;                // Anzahl Ecken gesamt
+        final double[] pu, pw, pn;   // Position
+        final double[] nu, nw, nn;   // Normale
+        final int[] quads;           // je 4 Eckindizes
+        final int nq;
+        final double r;
+        final double halfLen;
         final double noiseScale;
-        private final float[] vx, vy, vz, vl;
-        private long[] order;
-        private final double[] quadU;
+
+        private final float[] vx, vy, vz, vV, vU;
         private final boolean[] removed;
-        private final java.util.HashMap<Long, float[]> noiseCache = new java.util.HashMap<>();
+        private long[] order;
         private final float[] qxyz = new float[12];
         private final float[] quv = new float[8];
-        private final int[] quadIdx = new int[4];
+        private final HashMap<Long, float[]> noiseCache = new HashMap<>();
 
-        LinkMesh(ChainSettings s, int arcSegments, int tubeSegments) {
-            double r = s.thickness();
-            double halfLen = s.linkLength() * 0.5 - r;
+        LinkMesh(ChainSettings s, int arcSegments, int tubeSegments, int spikeSegments) {
+            this.r = s.thickness();
+            this.halfLen = Math.max(0.1, s.linkLength() * 0.5 - r);
             double b = Math.max(r * 1.15, s.linkWidth() * 0.5 - r);
             double straight = Math.max(0, halfLen - b);
+            int straightSeg = Math.max(1, arcSegments / 3);
 
             List<double[]> path = new ArrayList<>(); // {u, w, Nu, Nw}
             for (int i = 0; i < arcSegments; i++) {
                 double a = -Math.PI / 2 + Math.PI * i / arcSegments;
                 path.add(new double[]{straight + b * Math.cos(a), b * Math.sin(a), Math.cos(a), Math.sin(a)});
             }
-            if (straight > 1e-4) {
-                path.add(new double[]{straight, b, 0, 1});
-                path.add(new double[]{0, b, 0, 1});
+            for (int i = 0; i < straightSeg && straight > 1e-4; i++) {
+                path.add(new double[]{straight - 2 * straight * i / straightSeg, b, 0, 1});
             }
             for (int i = 0; i < arcSegments; i++) {
                 double a = Math.PI / 2 + Math.PI * i / arcSegments;
                 path.add(new double[]{-straight + b * Math.cos(a), b * Math.sin(a), Math.cos(a), Math.sin(a)});
             }
-            if (straight > 1e-4) {
-                path.add(new double[]{-straight, -b, 0, -1});
-                path.add(new double[]{0, -b, 0, -1});
+            for (int i = 0; i < straightSeg && straight > 1e-4; i++) {
+                path.add(new double[]{-straight + 2 * straight * i / straightSeg, -b, 0, -1});
             }
-
             this.m = path.size();
             this.k = tubeSegments;
-            this.noiseScale = 1.0 / Math.max(0.05, r * 2.6);
-            int n = m * k;
-            pu = new double[n]; pw = new double[n]; pn = new double[n];
-            nu = new double[n]; nw = new double[n]; nn = new double[n];
+
+            // Dornen: Kegel auf den Längsseiten, leicht nach oben (gegen U) gebogen
+            int spikesPerSide = s.spikes();
+            int ks = Math.max(3, spikeSegments);
+            int spikeCount = spikesPerSide * 2;
+            this.nv = m * k + spikeCount * (ks + 1);
+            pu = new double[nv]; pw = new double[nv]; pn = new double[nv];
+            nu = new double[nv]; nw = new double[nv]; nn = new double[nv];
+
             for (int i = 0; i < m; i++) {
                 double[] p = path.get(i);
                 for (int j = 0; j < k; j++) {
@@ -389,123 +413,139 @@ public final class ChainGeometry {
                     nu[idx] = cu; nw[idx] = cw; nn[idx] = cn;
                 }
             }
-            vx = new float[n]; vy = new float[n]; vz = new float[n]; vl = new float[n];
-            order = new long[n];
-            quadU = new double[n];
-            removed = new boolean[n];
-        }
-
-        /** Rauschwert je Viereck – hängt nur vom Glied ab, wird deshalb zwischengespeichert. */
-        private float[] noiseFor(long seed) {
-            float[] v = this.noiseCache.get(seed);
-            if (v != null) return v;
-            if (this.noiseCache.size() > 2048) this.noiseCache.clear();
-            int n = m * k;
-            v = new float[n];
+            List<int[]> quadList = new ArrayList<>();
             for (int i = 0; i < m; i++) {
                 int i1 = (i + 1) % m;
                 for (int j = 0; j < k; j++) {
                     int j1 = (j + 1) % k;
-                    int a = i * k + j, b = i * k + j1, c = i1 * k + j1, d = i1 * k + j;
-                    double mu = (pu[a] + pu[b] + pu[c] + pu[d]) * 0.25;
-                    double mw = (pw[a] + pw[b] + pw[c] + pw[d]) * 0.25;
-                    double mn = (pn[a] + pn[b] + pn[c] + pn[d]) * 0.25;
-                    v[a] = (float) noise(mu * noiseScale, mw * noiseScale, mn * noiseScale + (seed & 63), seed);
+                    quadList.add(new int[]{i * k + j, i * k + j1, i1 * k + j1, i1 * k + j});
                 }
+            }
+
+            int base = m * k;
+            double spikeLen = r * 2.1, spikeRad = r * 0.55;
+            for (int side = -1; side <= 1; side += 2) {
+                for (int q = 0; q < spikesPerSide; q++) {
+                    double t = spikesPerSide == 1 ? 0 : (2.0 * (q + 0.5) / spikesPerSide - 1) * 0.75;
+                    double cu0 = straight * t, cw0 = side * (b + r * 0.55);
+                    // Richtung: nach außen und etwas nach oben
+                    double du = -0.55, dw = side, dl = Math.sqrt(du * du + dw * dw);
+                    du /= dl; dw /= dl;
+                    // senkrechte Basis-Achsen zum Kegel: e1 in Ring-Ebene, e2 = N
+                    double e1u = -dw, e1w = du;
+                    for (int j = 0; j < ks; j++) {
+                        double phi = 2 * Math.PI * j / ks;
+                        double cs = Math.cos(phi), sn = Math.sin(phi);
+                        int idx = base + j;
+                        pu[idx] = cu0 + spikeRad * cs * e1u;
+                        pw[idx] = cw0 + spikeRad * cs * e1w;
+                        pn[idx] = spikeRad * sn;
+                        // Kegel-Normale: radial + etwas entlang der Spitze
+                        double ru = cs * e1u, rw = cs * e1w, rn = sn;
+                        double sl = spikeRad / spikeLen;
+                        double gu = ru + sl * du, gw = rw + sl * dw, gn = rn;
+                        double gl = Math.sqrt(gu * gu + gw * gw + gn * gn);
+                        nu[idx] = gu / gl; nw[idx] = gw / gl; nn[idx] = gn / gl;
+                    }
+                    int tip = base + ks;
+                    pu[tip] = cu0 + du * spikeLen; pw[tip] = cw0 + dw * spikeLen; pn[tip] = 0;
+                    nu[tip] = du; nw[tip] = dw; nn[tip] = 0;
+                    for (int j = 0; j < ks; j++) {
+                        quadList.add(new int[]{base + j, base + (j + 1) % ks, tip, tip});
+                    }
+                    base += ks + 1;
+                }
+            }
+
+            this.nq = quadList.size();
+            this.quads = new int[nq * 4];
+            for (int q = 0; q < nq; q++) System.arraycopy(quadList.get(q), 0, this.quads, q * 4, 4);
+            this.noiseScale = 1.0 / Math.max(0.05, r * 2.2);
+            vx = new float[nv]; vy = new float[nv]; vz = new float[nv]; vV = new float[nv]; vU = new float[nv];
+            removed = new boolean[nq];
+            order = new long[nq];
+        }
+
+        /** Rauschwert je Ecke (Zerfall) und Verformung – hängt nur vom Glied ab, wird zwischengespeichert. */
+        private float[] noiseFor(long seed) {
+            float[] v = this.noiseCache.get(seed);
+            if (v != null) return v;
+            if (this.noiseCache.size() > 4096) this.noiseCache.clear();
+            v = new float[nv * 2];
+            double off = (seed & 255) * 0.37;
+            for (int i = 0; i < nv; i++) {
+                // + Neigung: das untere Ende eines Glieds zerfällt zuerst
+                v[i] = (float) (fbm(pu[i] * noiseScale + off, pw[i] * noiseScale, pn[i] * noiseScale, seed) - 0.22 * pu[i] / halfLen);
+                v[nv + i] = (float) noise(pu[i] * noiseScale * 1.7, pw[i] * noiseScale * 1.7 + off, pn[i] * noiseScale * 1.7, ~seed);
             }
             this.noiseCache.put(seed, v);
             return v;
         }
 
         int emit(Part p, QuadSink sink) {
-            int n = m * k;
-            for (int idx = 0; idx < n; idx++) {
-                double x = p.cx + pu[idx] * p.ux + pw[idx] * p.wx + pn[idx] * p.nx;
-                double y = p.cy + pu[idx] * p.uy + pw[idx] * p.wy + pn[idx] * p.ny;
-                double z = p.cz + pu[idx] * p.uz + pw[idx] * p.wz + pn[idx] * p.nz;
-                double gy = nu[idx] * p.uy + nw[idx] * p.wy + nn[idx] * p.ny;
+            boolean damaged = p.damage > 0.001;
+            float[] nz = damaged ? noiseFor(p.seed) : null;
+            double d = p.damage;
+            double melt = damaged ? r * 0.45 * Math.min(1, d * 1.6) : 0;
+
+            for (int idx = 0; idx < nv; idx++) {
+                double lu = pu[idx], lw = pw[idx], ln = pn[idx];
+                if (damaged) {
+                    // geschmolzene, unregelmäßige Oberfläche
+                    double disp = (nz[nv + idx] - 0.5) * melt;
+                    lu += nu[idx] * disp; lw += nw[idx] * disp; ln += nn[idx] * disp;
+                }
+                double x = p.cx + lu * p.ux + lw * p.wx + ln * p.nx;
+                double y = p.cy + lu * p.uy + lw * p.wy + ln * p.ny;
+                double z = p.cz + lu * p.uz + lw * p.wz + ln * p.nz;
                 double gx = nu[idx] * p.ux + nw[idx] * p.wx + nn[idx] * p.nx;
+                double gy = nu[idx] * p.uy + nw[idx] * p.wy + nn[idx] * p.ny;
                 double gz = nu[idx] * p.uz + nw[idx] * p.wz + nn[idx] * p.nz;
                 double dist = Math.sqrt(x * x + y * y + z * z);
                 double ndv = -(gx * x + gy * y + gz * z) / dist;
-                vl[idx] = (float) (1.0 - shade(gy, ndv));
+                vV[idx] = (float) (1.0 - shade(gy, ndv));
+                double glow = 0;
+                if (damaged) {
+                    glow = Math.min(1, Math.max(0, (d + 0.11 - nz[idx]) / 0.11));
+                    glow = glow * glow * (3 - 2 * glow);
+                }
+                vU[idx] = (float) (0.02 + 0.96 * glow);
                 vx[idx] = (float) x; vy[idx] = (float) y; vz[idx] = (float) z;
             }
 
-            boolean damaged = p.damage > 0.001;
-            boolean[] removed = this.removed;
-            if (damaged) {
-                float[] nv = noiseFor(p.seed);
-                for (int q = 0; q < n; q++) removed[q] = nv[q] < p.damage;
-            }
             int visible = 0;
-            for (int i = 0; i < m; i++) {
-                int i1 = (i + 1) % m;
-                for (int j = 0; j < k; j++) {
-                    int j1 = (j + 1) % k;
-                    int a = i * k + j, b = i * k + j1, c = i1 * k + j1, d = i1 * k + j;
-                    if (damaged && removed[a]) continue;                  // weggebrochen
-                    double mu = (pu[a] + pu[b] + pu[c] + pu[d]) * 0.25;
-                    double mw = (pw[a] + pw[b] + pw[c] + pw[d]) * 0.25;
-                    double mn = (pn[a] + pn[b] + pn[c] + pn[d]) * 0.25;
-                    double qu = nu[a] + nu[b] + nu[c] + nu[d];
-                    double qw = nw[a] + nw[b] + nw[c] + nw[d];
-                    double qn = nn[a] + nn[b] + nn[c] + nn[d];
-                    double x = p.cx + mu * p.ux + mw * p.wx + mn * p.nx;
-                    double y = p.cy + mu * p.uy + mw * p.wy + mn * p.ny;
-                    double z = p.cz + mu * p.uz + mw * p.wz + mn * p.nz;
-                    double gx = qu * p.ux + qw * p.wx + qn * p.nx;
-                    double gy = qu * p.uy + qw * p.wy + qn * p.ny;
-                    double gz = qu * p.uz + qw * p.wz + qn * p.nz;
-            boolean front = gx * x + gy * y + gz * z < 0;
-
-                    double u;
-                    if (damaged) {
-                        int im = (i + m - 1) % m, jm = (j + k - 1) % k;
-                        boolean edge = removed[i1 * k + j] || removed[im * k + j] || removed[i * k + j1] || removed[i * k + jm];
-                        if (!front) {
-                            u = U_CORE;                                  // Innenseite glüht
-                        } else if (edge) {
-                            u = U_EDGE;                                  // glühende Bruchkante
-                        } else {
-                            u = -1;                                      // normales Metall
-                        }
-                    } else {
-                        if (!front) continue;
-                        u = -1;
-                    }
-                    quadU[visible] = u;
-                    float dist2 = (float) (x * x + y * y + z * z);
-                    order[visible++] = ((long) Float.floatToIntBits(dist2) << 32) | (a & 0xFFFFFFFFL);
-                }
+            for (int q = 0; q < nq; q++) {
+                int a = quads[q * 4], b = quads[q * 4 + 1], c = quads[q * 4 + 2], e = quads[q * 4 + 3];
+                if (damaged && (nz[a] + nz[b] + nz[c] + nz[e]) * 0.25 < d) continue; // weggebrochen
+                double x = (vx[a] + vx[b] + vx[c] + vx[e]) * 0.25;
+                double y = (vy[a] + vy[b] + vy[c] + vy[e]) * 0.25;
+                double z = (vz[a] + vz[b] + vz[c] + vz[e]) * 0.25;
+                double qu = nu[a] + nu[b] + nu[c] + nu[e];
+                double qw = nw[a] + nw[b] + nw[c] + nw[e];
+                double qn = nn[a] + nn[b] + nn[c] + nn[e];
+                double gx = qu * p.ux + qw * p.wx + qn * p.nx;
+                double gy = qu * p.uy + qw * p.wy + qn * p.ny;
+                double gz = qu * p.uz + qw * p.wz + qn * p.nz;
+                boolean front = gx * x + gy * y + gz * z < 0;
+                if (!front && !damaged) continue;
+                removed[q] = !front; // hier: Innenseite merken
+                float dist2 = (float) (x * x + y * y + z * z);
+                order[visible++] = ((long) Float.floatToIntBits(dist2) << 32) | q;
             }
-            if (visible == 0) return 0;
-            // Sortieren mit u zusammen: u in eigenem Array nach Index ablegen
-            double[] uByIndex = UBUF.get();
-            if (uByIndex.length < n) { uByIndex = new double[n]; UBUF.set(uByIndex); }
-            for (int q = 0; q < visible; q++) uByIndex[(int) (order[q] & 0xFFFFFFFFL)] = quadU[q];
             Arrays.sort(order, 0, visible);
-            for (int q = visible - 1; q >= 0; q--) {
-                int a = (int) (order[q] & 0xFFFFFFFFL);
-                int i = a / k, j = a % k;
-                int i1 = (i + 1) % m, j1 = (j + 1) % k;
-                quadIdx[0] = a; quadIdx[1] = i * k + j1; quadIdx[2] = i1 * k + j1; quadIdx[3] = i1 * k + j;
-                double u = uByIndex[a];
-                // Metall: u läuft entlang des Rings (Kratzer-Muster), ohne Sprung an der Naht
-                double uMetal0 = 0.02 + 0.46 * (i / (double) m);
-                double uMetal1 = 0.02 + 0.46 * ((i + 1) / (double) m);
+            for (int o = visible - 1; o >= 0; o--) {
+                int q = (int) (order[o] & 0xFFFFFFFFL);
+                boolean inside = removed[q];
                 for (int t = 0; t < 4; t++) {
-                    int vi = quadIdx[t];
+                    int vi = quads[q * 4 + t];
                     qxyz[t * 3] = vx[vi]; qxyz[t * 3 + 1] = vy[vi]; qxyz[t * 3 + 2] = vz[vi];
-                    double uu = u >= 0 ? u + (t >= 2 ? 0.05 : 0) : (t >= 2 ? uMetal1 : uMetal0);
-                    quv[t * 2] = (float) uu;
-                    quv[t * 2 + 1] = vl[vi];
+                    // Innenseite eines aufgebrochenen Glieds: glühender Kern
+                    quv[t * 2] = inside ? 0.9F : vU[vi];
+                    quv[t * 2 + 1] = inside ? 0.45F : vV[vi];
                 }
                 sink.quad(qxyz, quv);
             }
             return visible;
         }
-
-        private static final ThreadLocal<double[]> UBUF = ThreadLocal.withInitial(() -> new double[256]);
     }
 }

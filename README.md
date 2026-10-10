@@ -30,15 +30,21 @@ Wichtige Werte in `02_chains.json` → `chains`:
 
 | Wert | Bedeutung | Standard |
 |---|---|---|
-| `spacing` | Abstand des Rasters in Blöcken | 150 |
-| `chance` | Anteil der Rasterfelder mit Kette (0–1) | 0.45 |
+| `spacing` | Abstand des Rasters in Blöcken | 220 |
+| `chance` | Anteil der Rasterfelder mit Kette (0–1) | 0.55 |
 | `cellRadius` | Wie viele Felder rundum sichtbar sind (mehr = mehr Ketten, mehr Leistung) | 2 |
-| `topY` | Aufhänge-Höhe | 330 |
-| `minLength` / `maxLength` | Kettenlänge | 100 / 210 |
-| `linkLength` / `linkWidth` / `thickness` | Größe der Glieder | 6 / 3.6 / 0.5 |
-| `swingDegrees` / `swingSpeed` | Pendel-Ausschlag und Tempo | 4 / 1 |
+| `topY` | Aufhänge-Höhe | 420 |
+| `minLength` / `maxLength` | Kettenlänge | 150 / 280 |
+| `linkLength` / `linkWidth` / `thickness` | Größe der Glieder | 11 / 7 / 1.45 |
+| `spikes` | Dornen pro Seite eines Glieds (0 = glatt) | 2 |
+| `lean` | Maximale Schräglage einer Kette (Grad) | 14 |
+| `swingDegrees` / `swingSpeed` | Pendel-Ausschlag und Tempo | 3 / 1 |
 | `wave` | Wie stark sich die Kette beim Pendeln biegt | 0.6 |
 | `seed` | Andere Zahl = andere Verteilung | 2424 |
+
+Unter `damage`: `brokenChance` (Anteil zerfallender Ketten), `brokenLinks` (wie viele Glieder am Ende zerfallen), `wear` / `wearStrength` (kleine Schäden mitten in der Kette), `fragments` / `fragmentFall` (Kristall-Splitter unter dem Ende).
+
+Weitere Schalter: `hideClouds` (Vanilla-Wolken aus, Standard `true`), `nearDistance` (bis zu dieser Entfernung sind Ketten echte 3D-Objekte in der Welt, Standard 220).
 
 `tint` färbt die Ketten ein, z. B. `{ "red": 1, "green": 0.6, "blue": 0.9 }`.
 

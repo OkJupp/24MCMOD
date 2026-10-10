@@ -1,7 +1,11 @@
 {
   "schemaVersion": 1,
   "type": "nuit_chains:chains",
-  "tint": { "red": 1.0, "green": 0.95, "blue": 1.0 },
+  "tint": {
+    "red": 1.0,
+    "green": 0.95,
+    "blue": 1.0
+  },
   "hideClouds": true,
   "nearDistance": 220,
   "chains": {
@@ -12,9 +16,10 @@
     "minLength": 150,
     "maxLength": 280,
     "linkLength": 11.0,
-    "linkWidth": 7.6,
-    "thickness": 1.65,
-    "lean": 16,
+    "linkWidth": 7.0,
+    "thickness": 1.45,
+    "lean": 14,
+    "spikes": 2,
     "swingDegrees": 3.0,
     "swingSpeed": 1.0,
     "wave": 0.6,
@@ -22,16 +27,20 @@
   },
   "damage": {
     "brokenChance": 0.7,
-    "brokenLinks": 6,
-    "wear": 0.18,
-    "wearStrength": 0.4,
-    "fragments": 14,
-    "fragmentFall": 45
+    "brokenLinks": 4,
+    "wear": 0.06,
+    "wearStrength": 0.3,
+    "fragments": 18,
+    "fragmentFall": 40
   },
   "properties": {
     "layer": 2
   },
   "conditions": {
-    "skyboxes": { "entries": ["minecraft:overworld"] }
+    "skyboxes": {
+      "entries": [
+        "minecraft:overworld"
+      ]
+    }
   }
 }
