@@ -60,7 +60,7 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
             DamageSettings.CODEC.optionalFieldOf("damage", DamageSettings.DEFAULT).forGetter(ChainSkybox::getDamage),
             VariationSettings.CODEC.optionalFieldOf("variation", VariationSettings.DEFAULT).forGetter(ChainSkybox::getVariation),
             MotionSettings.CODEC.optionalFieldOf("motion", MotionSettings.DEFAULT).forGetter(ChainSkybox::getMotion),
-            Codec.floatRange(0F, 3F).optionalFieldOf("glow", 0.32F).forGetter(ChainSkybox::getGlow),
+            Codec.floatRange(0F, 3F).optionalFieldOf("glow", 0.45F).forGetter(ChainSkybox::getGlow),
             Codec.floatRange(0F, 1000F).optionalFieldOf("nearDistance", 220F).forGetter(ChainSkybox::getNearDistance),
             Codec.BOOL.optionalFieldOf("hideClouds", true).forGetter(ChainSkybox::isHideClouds)
     ).apply(instance, ChainSkybox::new));

@@ -55,8 +55,8 @@ public final class ChainGeometry {
         this.dmg = damage;
         this.var = variation;
         this.mot = motion;
-        this.meshNear = new LinkMesh(settings, 16, 14, 10);
-        this.meshMid = new LinkMesh(settings, 9, 9, 6);
+        this.meshNear = new LinkMesh(settings, 13, 12, 8);
+        this.meshMid = new LinkMesh(settings, 8, 8, 5);
         this.meshFar = new LinkMesh(settings, 5, 6, 4);
         this.meshDamaged = new LinkMesh(settings, 30, 22, 10);
     }
@@ -228,7 +228,8 @@ public final class ChainGeometry {
     public int build(Chain c, double ex, double ey, double ez, double timeSec,
                      QuadSink farSink, QuadSink nearSink, QuadSink glowSink, double splitDistance) {
         double split2 = splitDistance * splitDistance;
-        double topFade = Math.max(0.01, s.topFade() * Math.sqrt(c.scale()));
+        // Ausblenden nie länger als 40 % der Kette – sonst wird die Kette nirgends richtig sichtbar
+        double topFade = Math.max(0.01, Math.min(s.topFade() * Math.sqrt(c.scale()), c.length() * 0.4));
         double scale = c.scale();
         double pitch = pitch() * scale;
         double swing = Math.toRadians(s.swingDegrees());
@@ -346,7 +347,7 @@ public final class ChainGeometry {
 
         // Kristall-Splitter unter einem zerfallenden Ende
         if (c.broken() && dmg.fragments() > 0) {
-            double size = s.thickness() * 1.1 * scale;
+            double size = s.thickness() * 0.45 * scale;
             double life = 10.0;
             for (int k = 0; k < dmg.fragments(); k++) {
                 long fh = mix(c.hash() ^ (k * 0xD1B54A32D192ED03L));
@@ -397,8 +398,8 @@ public final class ChainGeometry {
                 count += emitShard(p, sink);
             } else {
                 double ld2 = d2 / (p.scale * p.scale);           // große Glieder behalten Details länger
-                LinkMesh mesh = ld2 < 260 * 260 ? (p.damage > 0.001 ? this.meshDamaged : this.meshNear)
-                        : ld2 < 520 * 520 ? this.meshMid : this.meshFar;
+                LinkMesh mesh = ld2 < 200 * 200 ? (p.damage > 0.001 ? this.meshDamaged : this.meshNear)
+                        : ld2 < 420 * 420 ? this.meshMid : this.meshFar;
                 count += mesh.emit(p, sink);
             }
         }
@@ -593,7 +594,7 @@ public final class ChainGeometry {
             }
 
             int base = m * k;
-            double spikeLen = r * 2.1, spikeRad = r * 0.55;
+            double spikeLen = r * 1.6, spikeRad = r * 0.42;
             for (int side = -1; side <= 1; side += 2) {
                 for (int q = 0; q < spikesPerSide; q++) {
                     double t = spikesPerSide == 1 ? 0 : (2.0 * (q + 0.5) / spikesPerSide - 1) * 0.75;

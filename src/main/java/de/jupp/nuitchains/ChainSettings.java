@@ -29,9 +29,9 @@ public record ChainSettings(int spacing, float chance, int cellRadius, float top
                             float thickness, float lean, int spikes, float topFade, float swingDegrees, float swingSpeed, float wave, int seed) {
 
     public static final ChainSettings DEFAULT = new ChainSettings(
-            220, 0.55F, 2, 420F,
-            90F, 190F, 11.0F, 7.0F,
-            1.45F, 14F, 2, 150F, 1.0F, 1.0F, 0.6F, 2424);
+            180, 0.62F, 2, 450F,
+            120F, 220F, 18.0F, 11.5F,
+            2.4F, 12F, 2, 150F, 1.0F, 1.0F, 0.6F, 2424);
 
     public static final Codec<ChainSettings> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.intRange(16, 4096).optionalFieldOf("spacing", DEFAULT.spacing()).forGetter(ChainSettings::spacing),

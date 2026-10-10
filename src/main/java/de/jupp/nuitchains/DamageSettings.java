@@ -16,7 +16,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 public record DamageSettings(float brokenChance, int brokenLinks, float wear, float wearStrength,
                              int fragments, float fragmentFall) {
 
-    public static final DamageSettings DEFAULT = new DamageSettings(0.7F, 4, 0.12F, 0.6F, 6, 40F);
+    public static final DamageSettings DEFAULT = new DamageSettings(0.7F, 4, 0.05F, 0.6F, 5, 40F);
 
     public static final Codec<DamageSettings> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.floatRange(0F, 1F).optionalFieldOf("brokenChance", DEFAULT.brokenChance()).forGetter(DamageSettings::brokenChance),

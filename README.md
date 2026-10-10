@@ -34,15 +34,15 @@ Wichtige Werte in `05_chains.json` → `chains`:
 
 | Wert | Bedeutung | Standard |
 |---|---|---|
-| `spacing` | Abstand des Rasters in Blöcken | 220 |
-| `chance` | Anteil der Rasterfelder mit Kette (0–1) | 0.55 |
+| `spacing` | Abstand des Rasters in Blöcken | 180 |
+| `chance` | Anteil der Rasterfelder mit Kette (0–1) | 0.62 |
 | `cellRadius` | Wie viele Felder rundum sichtbar sind (mehr = mehr Ketten, mehr Leistung) | 2 |
-| `topY` | Aufhänge-Höhe | 420 |
-| `minLength` / `maxLength` | Kettenlänge | 90 / 190 |
-| `linkLength` / `linkWidth` / `thickness` | Größe der Glieder | 11 / 7 / 1.45 |
+| `topY` | Aufhänge-Höhe | 450 |
+| `minLength` / `maxLength` | Kettenlänge (wird gekürzt, falls sie unter `minBottomY` reichen würde) | 120 / 220 |
+| `linkLength` / `linkWidth` / `thickness` | Größe der Glieder | 18 / 11.5 / 2.4 |
 | `spikes` | Dornen pro Seite eines Glieds (0 = glatt) | 2 |
-| `lean` | Maximale Schräglage einer Kette (Grad) | 14 |
-| `topFade` | Über wie viele Blöcke die Kette oben weich aus dem Nichts eingeblendet wird | 150 |
+| `lean` | Maximale Schräglage einer Kette (Grad) | 12 |
+| `topFade` | Über wie viele Blöcke die Kette oben weich aus dem Nichts eingeblendet wird (höchstens 40 % der Kettenlänge) | 150 |
 | `swingDegrees` / `swingSpeed` | Pendel-Ausschlag und Tempo | 1 / 1 |
 | `wave` | Wie stark sich die Kette beim Pendeln biegt | 0.6 |
 | `seed` | Andere Zahl = andere Verteilung | 2424 |
@@ -55,7 +55,7 @@ Unter `motion`: `windStrength` / `windSpeed` (gemeinsame, weiche Windböen für 
 
 Weitere Schalter: `hideClouds` (Vanilla-Wolken **und** die LOD-Wolken von Distant Horizons aus, Standard `true` – deine DH-Einstellungsdatei bleibt dabei unverändert), `nearDistance` (bis zu dieser Entfernung sind Ketten echte 3D-Objekte in der Welt, Standard 220).
 
-`glow` = Stärke des Leuchtens um die Ketten (0 = aus, Standard 0.32; leuchtet bei Blitzen kurz mit auf). `tint` färbt die Ketten ein, z. B. `{ "red": 1, "green": 0.6, "blue": 0.9 }`.
+`glow` = Stärke des Leuchtens um die Ketten (0 = aus, Standard 0.45; leuchtet bei Blitzen kurz mit auf). `tint` färbt die Ketten ein, z. B. `{ "red": 1, "green": 0.6, "blue": 0.9 }`.
 
 ### Blitze (`04_lightning.json` → `lightning`)
 
