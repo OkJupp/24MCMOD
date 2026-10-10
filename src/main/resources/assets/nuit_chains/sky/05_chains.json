@@ -34,8 +34,15 @@
     "fragments": 6,
     "fragmentFall": 40
   },
+  "variation": {
+    "sizeMin": 0.55,
+    "sizeMax": 1.3,
+    "giantChance": 0.12,
+    "giantSize": 2.4,
+    "topYVariation": 90
+  },
   "properties": {
-    "layer": 2
+    "layer": 5
   },
   "conditions": {
     "skyboxes": {

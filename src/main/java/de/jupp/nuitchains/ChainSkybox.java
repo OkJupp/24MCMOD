@@ -58,6 +58,7 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
             RGBA.CODEC.optionalFieldOf("tint", WHITE).forGetter(ChainSkybox::getTint),
             ChainSettings.CODEC.optionalFieldOf("chains", ChainSettings.DEFAULT).forGetter(ChainSkybox::getSettings),
             DamageSettings.CODEC.optionalFieldOf("damage", DamageSettings.DEFAULT).forGetter(ChainSkybox::getDamage),
+            VariationSettings.CODEC.optionalFieldOf("variation", VariationSettings.DEFAULT).forGetter(ChainSkybox::getVariation),
             Codec.floatRange(0F, 1000F).optionalFieldOf("nearDistance", 220F).forGetter(ChainSkybox::getNearDistance),
             Codec.BOOL.optionalFieldOf("hideClouds", true).forGetter(ChainSkybox::isHideClouds)
     ).apply(instance, ChainSkybox::new));
@@ -66,6 +67,7 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
     private final RGBA tint;
     private final ChainSettings settings;
     private final DamageSettings damage;
+    private final VariationSettings variation;
     private final float nearDistance;
     private final boolean hideClouds;
     private final ChainGeometry geometry;
@@ -90,15 +92,17 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
     }
 
     public ChainSkybox(Properties properties, Conditions conditions, Identifier texture, RGBA tint,
-                       ChainSettings settings, DamageSettings damage, float nearDistance, boolean hideClouds) {
+                       ChainSettings settings, DamageSettings damage, VariationSettings variation,
+                       float nearDistance, boolean hideClouds) {
         super(properties, conditions);
         this.texture = texture;
         this.tint = tint;
         this.settings = settings;
         this.damage = damage;
+        this.variation = variation;
         this.nearDistance = nearDistance;
         this.hideClouds = hideClouds;
-        this.geometry = new ChainGeometry(settings, damage);
+        this.geometry = new ChainGeometry(settings, damage, variation);
     }
 
     // ------------------------------------------------------------------ Welt-Durchgang (läuft vor dem Himmel)
@@ -271,6 +275,10 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
 
     public DamageSettings getDamage() {
         return this.damage;
+    }
+
+    public VariationSettings getVariation() {
+        return this.variation;
     }
 
     public float getNearDistance() {

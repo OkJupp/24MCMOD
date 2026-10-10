@@ -27,11 +27,12 @@ public final class ChainGeometry {
     public record Chain(long hash, double ax, double ay, double az, double length, int links,
                         double phase1, double phase2, double swingAxis, double twist,
                         double leanX, double leanZ, boolean broken, int brokenLinks,
-                        double fade, double distance) {
+                        double scale, double fade, double distance) {
     }
 
     private final ChainSettings s;
     private final DamageSettings dmg;
+    private final VariationSettings var;
     private final LinkMesh meshNear;
     private final LinkMesh meshMid;
     private final LinkMesh meshFar;
@@ -40,9 +41,10 @@ public final class ChainGeometry {
     private final List<Part> parts = new ArrayList<>();
     private long[] partOrder = new long[64];
 
-    public ChainGeometry(ChainSettings settings, DamageSettings damage) {
+    public ChainGeometry(ChainSettings settings, DamageSettings damage, VariationSettings variation) {
         this.s = settings;
         this.dmg = damage;
+        this.var = variation;
         this.meshNear = new LinkMesh(settings, 16, 14, 10);
         this.meshMid = new LinkMesh(settings, 9, 9, 6);
         this.meshFar = new LinkMesh(settings, 5, 6, 4);
@@ -122,10 +124,19 @@ public final class ChainGeometry {
                 double ax = (cx + 0.15 + 0.7 * rnd(h, 1)) * sp;
                 double az = (cz + 0.15 + 0.7 * rnd(h, 2)) * sp;
                 double len = minL + (maxL - minL) * rnd(h, 3);
+                double scale;
+                if (rnd(h, 12) < var.giantChance()) {
+                    scale = var.giantSize() * (0.85 + 0.3 * rnd(h, 13));
+                    len *= 1.35;                                   // Riesen hängen auch länger
+                } else {
+                    double t = rnd(h, 13);
+                    scale = var.sizeMin() + (var.sizeMax() - var.sizeMin()) * t;
+                }
+                double topY = s.topY() + (rnd(h, 14) * 2 - 1) * var.topYVariation() + (scale - 1) * 60;
                 double leanA = rnd(h, 8) * Math.PI * 2;
                 double leanM = Math.toRadians(s.lean()) * (0.25 + 0.75 * rnd(h, 9));
                 double leanX = Math.sin(leanM) * Math.cos(leanA), leanZ = Math.sin(leanM) * Math.sin(leanA);
-                double mx = ax + leanX * len * 0.5, mz = az + leanZ * len * 0.5, my = s.topY() - len * 0.5;
+                double mx = ax + leanX * len * 0.5, mz = az + leanZ * len * 0.5, my = topY - len * 0.5;
                 double dx = mx - ex, dz = mz - ez;
                 double horiz = Math.sqrt(dx * dx + dz * dz);
                 double fade = 1.0 - smooth(fadeStart, fadeEnd, horiz);
@@ -133,9 +144,9 @@ public final class ChainGeometry {
                 double dist = Math.sqrt(horiz * horiz + (my - ey) * (my - ey));
                 boolean broken = rnd(h, 10) < dmg.brokenChance();
                 int bl = Math.max(1, (int) Math.round(dmg.brokenLinks() * (0.6 + 0.8 * rnd(h, 11))));
-                out.add(new Chain(h, ax, s.topY(), az, len, Math.max(2, (int) Math.round(len / pitch)),
+                out.add(new Chain(h, ax, topY, az, len, Math.max(2, (int) Math.round(len / (pitch * scale))),
                         rnd(h, 4) * Math.PI * 2, rnd(h, 5) * Math.PI * 2,
-                        rnd(h, 6) * Math.PI, rnd(h, 7) * Math.PI, leanX, leanZ, broken, bl, fade, dist));
+                        rnd(h, 6) * Math.PI, rnd(h, 7) * Math.PI, leanX, leanZ, broken, bl, scale, fade, dist));
             }
         }
         out.sort((a, b) -> Double.compare(b.distance(), a.distance()));
@@ -158,6 +169,7 @@ public final class ChainGeometry {
         double sx, sy, sz;
         double glow;
         boolean hit;      // Einschlag statt Zerfall
+        double scale = 1; // Größe des Glieds
         float alpha;      // oben ausblenden
     }
 
@@ -179,7 +191,8 @@ public final class ChainGeometry {
                      QuadSink farSink, QuadSink nearSink, double splitDistance) {
         double split2 = splitDistance * splitDistance;
         double topFade = Math.max(0.01, s.topFade());
-        double pitch = pitch();
+        double scale = c.scale();
+        double pitch = pitch() * scale;
         double swing = Math.toRadians(s.swingDegrees());
         double period = (8.0 + c.length() / 25.0) / Math.max(0.05, s.swingSpeed());
         double w1 = 2 * Math.PI / period;
@@ -204,6 +217,7 @@ public final class ChainGeometry {
 
             Part p = part(nParts++);
             p.shard = false;
+            p.scale = scale;
             p.cx = px + ux * pitch * 0.5 - ex;
             p.cy = py + uy * pitch * 0.5 - ey;
             p.cz = pz + uz * pitch * 0.5 - ez;
@@ -244,16 +258,16 @@ public final class ChainGeometry {
 
         // Kristall-Splitter unter einem zerfallenden Ende
         if (c.broken() && dmg.fragments() > 0) {
-            double size = s.thickness() * 1.1;
+            double size = s.thickness() * 1.1 * scale;
             double life = 10.0;
             for (int k = 0; k < dmg.fragments(); k++) {
                 long fh = mix(c.hash() ^ (k * 0xD1B54A32D192ED03L));
                 double age = (timeSec / (life * (0.7 + 0.6 * rnd(fh, 1))) + rnd(fh, 2)) % 1.0;
-                double scale = Math.min(1, age * 8) * (1 - age * age) * (0.35 + 0.8 * rnd(fh, 3));
-                if (scale < 0.04) continue;
+                double life01 = Math.min(1, age * 8) * (1 - age * age) * (0.35 + 0.8 * rnd(fh, 3));
+                if (life01 < 0.04) continue;
                 double ang = rnd(fh, 4) * Math.PI * 2;
-                double rad = s.linkWidth() * (0.15 + 0.9 * rnd(fh, 5)) * (0.3 + age);
-                double fall = dmg.fragmentFall() * age * (0.5 + rnd(fh, 6)) + s.linkLength() * 0.2;
+                double rad = s.linkWidth() * scale * (0.15 + 0.9 * rnd(fh, 5)) * (0.3 + age);
+                double fall = dmg.fragmentFall() * scale * age * (0.5 + rnd(fh, 6)) + s.linkLength() * scale * 0.2;
                 Part p = part(nParts++);
                 p.shard = true;
                 p.cx = px + Math.cos(ang) * rad + lastUx * fall - ex;
@@ -262,9 +276,9 @@ public final class ChainGeometry {
                 double spin = timeSec * (0.3 + 0.8 * rnd(fh, 7)) + rnd(fh, 8) * 6.3;
                 double a1 = rnd(fh, 9) * Math.PI * 2, a2 = Math.acos(2 * rnd(fh, 10) - 1);
                 setRotation(p, Math.sin(a2) * Math.cos(a1), Math.cos(a2), Math.sin(a2) * Math.sin(a1), spin);
-                p.sx = size * scale * (0.5 + 0.7 * rnd(fh, 11));
-                p.sy = size * scale * (1.2 + 1.6 * rnd(fh, 12)); // länglich wie Splitter
-                p.sz = size * scale * (0.4 + 0.5 * rnd(fh, 13));
+                p.sx = size * life01 * (0.5 + 0.7 * rnd(fh, 11));
+                p.sy = size * life01 * (1.2 + 1.6 * rnd(fh, 12)); // länglich wie Splitter
+                p.sz = size * life01 * (0.4 + 0.5 * rnd(fh, 13));
                 p.glow = 0.35 + 0.65 * rnd(fh, 14);
                 p.seed = fh;
                 p.damage = 0;
@@ -290,8 +304,9 @@ public final class ChainGeometry {
             if (p.shard) {
                 count += emitShard(p, sink);
             } else {
-                LinkMesh mesh = d2 < 230 * 230 ? (p.damage > 0.001 && d2 < 120 * 120 ? this.meshDamaged : this.meshNear)
-                        : d2 < 480 * 480 ? this.meshMid : this.meshFar;
+                double ld2 = d2 / (p.scale * p.scale);           // große Glieder behalten Details länger
+                LinkMesh mesh = ld2 < 230 * 230 ? (p.damage > 0.001 && ld2 < 120 * 120 ? this.meshDamaged : this.meshNear)
+                        : ld2 < 480 * 480 ? this.meshMid : this.meshFar;
                 count += mesh.emit(p, sink);
             }
         }
@@ -518,6 +533,7 @@ public final class ChainGeometry {
             float[] nz = damaged ? noiseFor(p.seed, p.hit) : null;
             double d = p.damage;
             double melt = damaged ? r * 0.45 * Math.min(1, d * 1.6) : 0;
+            double sc = p.scale;
 
             for (int idx = 0; idx < nv; idx++) {
                 double lu = pu[idx], lw = pw[idx], ln = pn[idx];
@@ -526,6 +542,7 @@ public final class ChainGeometry {
                     double disp = (nz[nv + idx] - 0.5) * melt;
                     lu += nu[idx] * disp; lw += nw[idx] * disp; ln += nn[idx] * disp;
                 }
+                lu *= sc; lw *= sc; ln *= sc;
                 double x = p.cx + lu * p.ux + lw * p.wx + ln * p.nx;
                 double y = p.cy + lu * p.uy + lw * p.wy + ln * p.ny;
                 double z = p.cz + lu * p.uz + lw * p.wz + ln * p.nz;

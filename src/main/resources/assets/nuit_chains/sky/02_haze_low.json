@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "type": "square-textured",
+  "texture": "nuit_chains:sky/haze_low.png",
+  "properties": {
+    "layer": 2,
+    "clock": "game_time",
+    "rotation": {
+      "skyboxRotation": true,
+      "speed": 1.0,
+      "axis": { "0": [0.0, 0.0, 0.0] }
+    }
+  },
+  "conditions": {
+    "skyboxes": { "entries": ["minecraft:overworld"] }
+  }
+}

@@ -22,11 +22,15 @@ Die Einstellungen liegen in `src/main/resources/assets/nuit_chains/sky/`:
 | Datei | Inhalt |
 |---|---|
 | `01_pink_galaxy.json` | Hintergrund-Himmel |
-| `02_chains.json` | Ketten: Anzahl, Höhe, Größe, Pendeln |
+| `02_haze_low.json` / `03_haze_high.json` | Zwei langsam treibende Nebel-Schichten (`speed` = Tempo, negativ = andere Richtung) |
+| `04_lightning.json` | Blitze |
+| `05_chains.json` | Ketten: Anzahl, Höhe, Größe, Pendeln, Schäden |
+
+Eine Ebene ausschalten: Datei per eigenem Ressourcenpaket überschreiben und `"conditions": { "skyboxes": { "entries": ["minecraft:none"] } }` setzen.
 
 Mit einem eigenen Ressourcenpaket lassen sich diese Dateien auch überschreiben, und zwar unter demselben Pfad `assets/nuit_chains/sky/…`.
 
-Wichtige Werte in `02_chains.json` → `chains`:
+Wichtige Werte in `05_chains.json` → `chains`:
 
 | Wert | Bedeutung | Standard |
 |---|---|---|
@@ -45,9 +49,25 @@ Wichtige Werte in `02_chains.json` → `chains`:
 
 Unter `damage`: `brokenChance` (Anteil zerfallender Ketten), `brokenLinks` (wie viele Glieder am Ende zerfallen), `wear` / `wearStrength` (Anteil und Größe der Einschläge entlang der ganzen Kette), `fragments` / `fragmentFall` (Kristall-Splitter unter dem Ende).
 
-Weitere Schalter: `hideClouds` (Vanilla-Wolken aus, Standard `true`), `nearDistance` (bis zu dieser Entfernung sind Ketten echte 3D-Objekte in der Welt, Standard 220).
+Unter `variation`: `sizeMin` / `sizeMax` (Größenbereich der Ketten), `giantChance` / `giantSize` (seltene Riesen-Ketten), `topYVariation` (wie stark die Aufhängehöhe schwankt).
+
+Weitere Schalter: `hideClouds` (Vanilla-Wolken **und** die LOD-Wolken von Distant Horizons aus, Standard `true` – deine DH-Einstellungsdatei bleibt dabei unverändert), `nearDistance` (bis zu dieser Entfernung sind Ketten echte 3D-Objekte in der Welt, Standard 220).
 
 `tint` färbt die Ketten ein, z. B. `{ "red": 1, "green": 0.6, "blue": 0.9 }`.
+
+### Blitze (`04_lightning.json` → `lightning`)
+
+| Wert | Bedeutung | Standard |
+|---|---|---|
+| `averageInterval` | Durchschnittlicher Abstand zwischen Blitzen (Sekunden) | 14 |
+| `doubleChance` | Chance auf einen zweiten Blitz direkt danach | 0.35 |
+| `minElevation` / `maxElevation` | Höhe des Startpunkts am Himmel (Grad) | 12 / 62 |
+| `length` | Länge eines Blitzes (Grad) | 38 |
+| `branches` | Maximale Verzweigungen | 4 |
+| `width` / `glowSize` | Dicke des Blitzes / Größe des Leuchtens | 1 / 1 |
+| `flashStrength` | Wie stark der ganze Himmel aufhellt | 0.22 |
+
+`color` färbt die Blitze.
 
 ## Neue Effekte hinzufügen
 

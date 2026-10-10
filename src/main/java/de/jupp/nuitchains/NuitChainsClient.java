@@ -1,5 +1,6 @@
 package de.jupp.nuitchains;
 
+import de.jupp.nuitchains.compat.DistantHorizonsCompat;
 import me.flashyreese.mods.nuit.api.NuitApi;
 import me.flashyreese.mods.nuit.api.skyboxes.Skybox;
 import net.fabricmc.api.ClientModInitializer;
@@ -30,15 +31,23 @@ public class NuitChainsClient implements ClientModInitializer {
     public void onInitializeClient() {
         // JSON: "type": "nuit_chains:chains"
         NuitApi.registerSkyboxType(id("chains"), 1, ChainSkybox.CODEC);
+        // JSON: "type": "nuit_chains:lightning"
+        NuitApi.registerSkyboxType(id("lightning"), 1, LightningSkybox.CODEC);
 
         // Vanilla-Wolken ausblenden, solange eine Ketten-Skybox aktiv ist ("hideClouds")
+        // (gilt auch für die eigenen LOD-Wolken von Distant Horizons, falls installiert)
         LevelExtractionEvents.END_EXTRACTION.register(context -> {
+            boolean hide = false;
             for (Skybox skybox : NuitApi.getInstance().getActiveSkyboxes()) {
                 if (skybox instanceof ChainSkybox chains && chains.isHideClouds()) {
-                    context.levelState().cloudColor = 0;
-                    return;
+                    hide = true;
+                    break;
                 }
             }
+            if (hide) {
+                context.levelState().cloudColor = 0;
+            }
+            DistantHorizonsCompat.setCloudsHidden(hide);
         });
 
         // Nahe Kettenteile als echte Weltgeometrie einreichen, ferne für den Himmel vorbereiten
