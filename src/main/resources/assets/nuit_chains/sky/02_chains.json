@@ -20,6 +20,7 @@
     "thickness": 1.45,
     "lean": 14,
     "spikes": 2,
+    "topFade": 90,
     "swingDegrees": 3.0,
     "swingSpeed": 1.0,
     "wave": 0.6,
@@ -28,9 +29,9 @@
   "damage": {
     "brokenChance": 0.7,
     "brokenLinks": 4,
-    "wear": 0.06,
-    "wearStrength": 0.3,
-    "fragments": 18,
+    "wear": 0.12,
+    "wearStrength": 0.6,
+    "fragments": 6,
     "fragmentFall": 40
   },
   "properties": {

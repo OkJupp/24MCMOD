@@ -49,7 +49,7 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
     private static final RGBA WHITE = new RGBA(1F, 1F, 1F, 1F);
     /** Radius der "Heranzieh"-Kugel im Himmel, muss kleiner als die Nuit-Skybox (100) sein. */
     private static final double SKY_RADIUS = 92.0;
-    private static final int FLOATS_PER_QUAD = 20;
+    private static final int FLOATS_PER_QUAD = 21; // 12 Position + 8 UV + 1 Deckkraft
 
     public static final Codec<ChainSkybox> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Properties.CODEC.optionalFieldOf("properties", Properties.of()).forGetter(AbstractSkybox::getProperties),
@@ -79,11 +79,12 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
         int quads;
         float fade;
 
-        void add(float[] xyz, float[] uv) {
+        void add(float[] xyz, float[] uv, float alpha) {
             int o = this.quads * FLOATS_PER_QUAD;
             if (o + FLOATS_PER_QUAD > this.data.length) this.data = Arrays.copyOf(this.data, this.data.length * 2);
             System.arraycopy(xyz, 0, this.data, o, 12);
             System.arraycopy(uv, 0, this.data, o + 12, 8);
+            this.data[o + 20] = alpha;
             this.quads++;
         }
     }
@@ -154,10 +155,11 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
         float[] data = new float[FLOATS_PER_QUAD * 512];
         int size;
 
-        void addQuad(float[] xyz, float[] uv) {
+        void addQuad(float[] xyz, float[] uv, float alpha) {
             if (this.size + FLOATS_PER_QUAD > this.data.length) this.data = Arrays.copyOf(this.data, this.data.length * 2);
             System.arraycopy(xyz, 0, this.data, this.size, 12);
             System.arraycopy(uv, 0, this.data, this.size + 12, 8);
+            this.data[this.size + 20] = alpha;
             this.size += FLOATS_PER_QUAD;
         }
     }
@@ -203,32 +205,50 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
         RenderPipeline pipeline = NuitRenderPipelines.texturedSkybox(Blend.normal().getBlendFunction());
 
         for (FarChain chain : this.farChains) {
-            if (chain.quads == 0) {
-                continue;
-            }
-            try (ByteBufferBuilder byteBufferBuilder = NuitRenderPipelines.byteBufferBuilder(pipeline, chain.quads * 4)) {
-                BufferBuilder builder = NuitRenderPipelines.bufferBuilder(byteBufferBuilder, pipeline);
-                float[] d = chain.data;
-                for (int q = 0; q < chain.quads; q++) {
-                    int o = q * FLOATS_PER_QUAD;
-                    for (int v = 0; v < 4; v++) {
-                        double x = d[o + v * 3], y = d[o + v * 3 + 1], z = d[o + v * 3 + 2];
-                        double dist = Math.sqrt(x * x + y * y + z * z);
-                        double sc = dist > SKY_RADIUS ? SKY_RADIUS / dist : 1.0; // Richtung bleibt gleich
-                        builder.addVertex((float) (x * sc), (float) (y * sc), (float) (z * sc))
-                                .setUv(d[o + 12 + v * 2], d[o + 13 + v * 2]);
-                    }
+            // aufeinanderfolgende Vierecke mit gleicher Deckkraft-Stufe in einem Aufruf zeichnen
+            int q = 0;
+            while (q < chain.quads) {
+                int level = alphaLevel(chain.data[q * FLOATS_PER_QUAD + 20]);
+                int end = q + 1;
+                while (end < chain.quads && alphaLevel(chain.data[end * FLOATS_PER_QUAD + 20]) == level) end++;
+                float alphaMul = level / (float) ALPHA_LEVELS;
+                if (alphaMul > 0) {
+                    drawFar(pipeline, modelView, chain, q, end, chain.fade * alphaMul);
                 }
-                MeshData mesh = builder.build();
-                if (mesh == null) {
-                    continue;
-                }
-                Vector4f color = new Vector4f(
-                        this.tint.getRed(), this.tint.getGreen(), this.tint.getBlue(),
-                        this.tint.getAlpha() * this.alpha * chain.fade);
-                GpuBufferSlice transforms = NuitRenderBackend.createDynamicTransforms(modelView, color);
-                NuitRenderBackend.drawTextured(pipeline, mesh, transforms, NuitRenderBackend.SAMPLER0_NAME, this.texture);
+                q = end;
             }
+        }
+    }
+
+    private static final int ALPHA_LEVELS = 24;
+
+    private static int alphaLevel(float alpha) {
+        return Math.round(Math.max(0F, Math.min(1F, alpha)) * ALPHA_LEVELS);
+    }
+
+    private void drawFar(RenderPipeline pipeline, Matrix4f modelView, FarChain chain, int from, int to, float alpha) {
+        try (ByteBufferBuilder byteBufferBuilder = NuitRenderPipelines.byteBufferBuilder(pipeline, (to - from) * 4)) {
+            BufferBuilder builder = NuitRenderPipelines.bufferBuilder(byteBufferBuilder, pipeline);
+            float[] d = chain.data;
+            for (int q = from; q < to; q++) {
+                int o = q * FLOATS_PER_QUAD;
+                for (int v = 0; v < 4; v++) {
+                    double x = d[o + v * 3], y = d[o + v * 3 + 1], z = d[o + v * 3 + 2];
+                    double dist = Math.sqrt(x * x + y * y + z * z);
+                    double sc = dist > SKY_RADIUS ? SKY_RADIUS / dist : 1.0; // Richtung bleibt gleich
+                    builder.addVertex((float) (x * sc), (float) (y * sc), (float) (z * sc))
+                            .setUv(d[o + 12 + v * 2], d[o + 13 + v * 2]);
+                }
+            }
+            MeshData mesh = builder.build();
+            if (mesh == null) {
+                return;
+            }
+            Vector4f color = new Vector4f(
+                    this.tint.getRed(), this.tint.getGreen(), this.tint.getBlue(),
+                    this.tint.getAlpha() * this.alpha * alpha);
+            GpuBufferSlice transforms = NuitRenderBackend.createDynamicTransforms(modelView, color);
+            NuitRenderBackend.drawTextured(pipeline, mesh, transforms, NuitRenderBackend.SAMPLER0_NAME, this.texture);
         }
     }
 

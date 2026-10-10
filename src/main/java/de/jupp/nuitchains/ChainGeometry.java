@@ -18,9 +18,9 @@ import java.util.List;
  */
 public final class ChainGeometry {
 
-    /** Empfängt ein fertiges Viereck: 4 Punkte (x,y,z relativ zur Kamera) und je u,v. */
+    /** Empfängt ein fertiges Viereck: 4 Punkte (x,y,z relativ zur Kamera), je u,v, und eine Deckkraft (0..1). */
     public interface QuadSink {
-        void quad(float[] xyz, float[] uv);
+        void quad(float[] xyz, float[] uv, float alpha);
     }
 
     /** Eine Kette, die in diesem Frame gezeichnet wird. */
@@ -157,6 +157,8 @@ public final class ChainGeometry {
         long seed;
         double sx, sy, sz;
         double glow;
+        boolean hit;      // Einschlag statt Zerfall
+        float alpha;      // oben ausblenden
     }
 
     private Part part(int idx) {
@@ -176,6 +178,7 @@ public final class ChainGeometry {
     public int build(Chain c, double ex, double ey, double ez, double timeSec,
                      QuadSink farSink, QuadSink nearSink, double splitDistance) {
         double split2 = splitDistance * splitDistance;
+        double topFade = Math.max(0.01, s.topFade());
         double pitch = pitch();
         double swing = Math.toRadians(s.swingDegrees());
         double period = (8.0 + c.length() / 25.0) / Math.max(0.05, s.swingSpeed());
@@ -219,6 +222,7 @@ public final class ChainGeometry {
             p.seed = mix(c.hash() + i * 0x9E3779B97F4A7C15L);
 
             double damage = 0;
+            boolean hit = false;
             if (c.broken()) {
                 int fromEnd = nLinks - 1 - i;
                 if (fromEnd < c.brokenLinks()) {
@@ -226,10 +230,16 @@ public final class ChainGeometry {
                     damage = 0.22 + 0.6 * f * f;
                 }
             }
-            if (rnd(p.seed, 1) < dmg.wear()) {
-                damage = Math.max(damage, dmg.wearStrength() * (0.4 + 0.6 * rnd(p.seed, 2)));
+            // Einschläge überall entlang der Kette (nicht im ausgeblendeten oberen Teil)
+            if (damage == 0 && i * pitch > topFade * 0.5 && rnd(p.seed, 1) < dmg.wear()) {
+                damage = dmg.wearStrength() * (0.6 + 0.4 * rnd(p.seed, 2));
+                hit = true;
             }
             p.damage = damage;
+            p.hit = hit;
+            // oben langsam aus dem Nichts einblenden
+            double fromTop = (i + 0.5) * pitch;
+            p.alpha = (float) smooth(0, topFade, fromTop);
         }
 
         // Kristall-Splitter unter einem zerfallenden Ende
@@ -258,6 +268,8 @@ public final class ChainGeometry {
                 p.glow = 0.35 + 0.65 * rnd(fh, 14);
                 p.seed = fh;
                 p.damage = 0;
+                p.hit = false;
+                p.alpha = 1F;
             }
         }
 
@@ -272,7 +284,9 @@ public final class ChainGeometry {
         for (int q = nParts - 1; q >= 0; q--) {
             Part p = this.parts.get((int) (this.partOrder[q] & 0xFFFFFFFFL));
             double d2 = p.cx * p.cx + p.cy * p.cy + p.cz * p.cz;
-            QuadSink sink = d2 < split2 ? nearSink : farSink;
+            if (p.alpha <= 0.004F) continue;
+            // halbtransparente Teile immer im Himmel zeichnen (Welt-Durchgang ist undurchsichtig)
+            QuadSink sink = d2 < split2 && p.alpha >= 0.999F ? nearSink : farSink;
             if (p.shard) {
                 count += emitShard(p, sink);
             } else {
@@ -339,7 +353,7 @@ public final class ChainGeometry {
                 fuv[t * 2] = (float) (0.02 + 0.96 * g);
                 fuv[t * 2 + 1] = v;
             }
-            sink.quad(fxyz, fuv);
+            sink.quad(fxyz, fuv, p.alpha);
             n++;
         }
         return n;
@@ -361,6 +375,7 @@ public final class ChainGeometry {
         final int nq;
         final double r;
         final double halfLen;
+        final double straight, b;
         final double noiseScale;
 
         private final float[] vx, vy, vz, vV, vU;
@@ -375,6 +390,8 @@ public final class ChainGeometry {
             this.halfLen = Math.max(0.1, s.linkLength() * 0.5 - r);
             double b = Math.max(r * 1.15, s.linkWidth() * 0.5 - r);
             double straight = Math.max(0, halfLen - b);
+            this.b = b;
+            this.straight = straight;
             int straightSeg = Math.max(1, arcSegments / 3);
 
             List<double[]> path = new ArrayList<>(); // {u, w, Nu, Nw}
@@ -467,15 +484,29 @@ public final class ChainGeometry {
         }
 
         /** Rauschwert je Ecke (Zerfall) und Verformung – hängt nur vom Glied ab, wird zwischengespeichert. */
-        private float[] noiseFor(long seed) {
-            float[] v = this.noiseCache.get(seed);
+        private float[] noiseFor(long seed, boolean hit) {
+            long key = hit ? seed ^ 0x48495448495448L : seed;
+            float[] v = this.noiseCache.get(key);
             if (v != null) return v;
             if (this.noiseCache.size() > 4096) this.noiseCache.clear();
             v = new float[nv * 2];
             double off = (seed & 255) * 0.37;
+            // Einschlagpunkt auf einer Längsseite (unabhängig von der Detailstufe)
+            double side = rnd(seed, 30) < 0.5 ? -1 : 1;
+            double phi = (rnd(seed, 31) - 0.5) * Math.PI * 1.2;
+            double hu = (rnd(seed, 32) * 2 - 1) * this.straight * 0.8;
+            double hw = side * (this.b + r * Math.cos(phi)), hn = r * Math.sin(phi);
+            double hitR = r * (2.4 + 1.0 * rnd(seed, 33));
             for (int i = 0; i < nv; i++) {
-                // + Neigung: das untere Ende eines Glieds zerfällt zuerst
-                v[i] = (float) (fbm(pu[i] * noiseScale + off, pw[i] * noiseScale, pn[i] * noiseScale, seed) - 0.22 * pu[i] / halfLen);
+                double f = fbm(pu[i] * noiseScale + off, pw[i] * noiseScale, pn[i] * noiseScale, seed);
+                if (hit) {
+                    double du = pu[i] - hu, dw = pw[i] - hw, dn = pn[i] - hn;
+                    double dist = Math.sqrt(du * du + dw * dw + dn * dn) / hitR;
+                    v[i] = (float) (0.6 * Math.min(1, dist) + 0.4 * f);     // Krater um den Einschlag
+                } else {
+                    // Neigung: das untere Ende eines Glieds zerfällt zuerst
+                    v[i] = (float) (f - 0.22 * pu[i] / halfLen);
+                }
                 v[nv + i] = (float) noise(pu[i] * noiseScale * 1.7, pw[i] * noiseScale * 1.7 + off, pn[i] * noiseScale * 1.7, ~seed);
             }
             this.noiseCache.put(seed, v);
@@ -484,7 +515,7 @@ public final class ChainGeometry {
 
         int emit(Part p, QuadSink sink) {
             boolean damaged = p.damage > 0.001;
-            float[] nz = damaged ? noiseFor(p.seed) : null;
+            float[] nz = damaged ? noiseFor(p.seed, p.hit) : null;
             double d = p.damage;
             double melt = damaged ? r * 0.45 * Math.min(1, d * 1.6) : 0;
 
@@ -543,7 +574,7 @@ public final class ChainGeometry {
                     quv[t * 2] = inside ? 0.9F : vU[vi];
                     quv[t * 2 + 1] = inside ? 0.45F : vV[vi];
                 }
-                sink.quad(qxyz, quv);
+                sink.quad(qxyz, quv, p.alpha);
             }
             return visible;
         }

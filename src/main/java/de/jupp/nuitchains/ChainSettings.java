@@ -18,6 +18,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
  * @param thickness     Dicke des Metalls (Radius) in Blöcken
  * @param lean          Maximale Schräglage einer Kette in Grad (jede Kette zufällig)
  * @param spikes        Dornen pro Seite eines Glieds (0 = glatte Kette)
+ * @param topFade       Über wie viele Blöcke die Kette oben aus dem Nichts eingeblendet wird
  * @param swingDegrees  Wie weit die Kette pendelt (Grad)
  * @param swingSpeed    Tempo-Faktor fürs Pendeln (1 = normal)
  * @param wave          Wie stark sich die Kette beim Pendeln biegt (0 = starr)
@@ -25,12 +26,12 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
  */
 public record ChainSettings(int spacing, float chance, int cellRadius, float topY,
                             float minLength, float maxLength, float linkLength, float linkWidth,
-                            float thickness, float lean, int spikes, float swingDegrees, float swingSpeed, float wave, int seed) {
+                            float thickness, float lean, int spikes, float topFade, float swingDegrees, float swingSpeed, float wave, int seed) {
 
     public static final ChainSettings DEFAULT = new ChainSettings(
             220, 0.55F, 2, 420F,
             150F, 280F, 11.0F, 7.0F,
-            1.45F, 14F, 2, 3.0F, 1.0F, 0.6F, 2424);
+            1.45F, 14F, 2, 90F, 3.0F, 1.0F, 0.6F, 2424);
 
     public static final Codec<ChainSettings> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.intRange(16, 4096).optionalFieldOf("spacing", DEFAULT.spacing()).forGetter(ChainSettings::spacing),
@@ -44,6 +45,7 @@ public record ChainSettings(int spacing, float chance, int cellRadius, float top
             Codec.floatRange(0.02F, 32F).optionalFieldOf("thickness", DEFAULT.thickness()).forGetter(ChainSettings::thickness),
             Codec.floatRange(0F, 60F).optionalFieldOf("lean", DEFAULT.lean()).forGetter(ChainSettings::lean),
             Codec.intRange(0, 4).optionalFieldOf("spikes", DEFAULT.spikes()).forGetter(ChainSettings::spikes),
+            Codec.floatRange(0F, 2000F).optionalFieldOf("topFade", DEFAULT.topFade()).forGetter(ChainSettings::topFade),
             Codec.floatRange(0F, 45F).optionalFieldOf("swingDegrees", DEFAULT.swingDegrees()).forGetter(ChainSettings::swingDegrees),
             Codec.floatRange(0F, 20F).optionalFieldOf("swingSpeed", DEFAULT.swingSpeed()).forGetter(ChainSettings::swingSpeed),
             Codec.floatRange(0F, 5F).optionalFieldOf("wave", DEFAULT.wave()).forGetter(ChainSettings::wave),

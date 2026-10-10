@@ -8,15 +8,15 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
  *
  * @param brokenChance  Anteil der Ketten, deren Ende zerfällt (0–1)
  * @param brokenLinks   Über wie viele Glieder sich der Zerfall am Ende erstreckt
- * @param wear          Anteil der Glieder mit Löchern/Abplatzern mitten in der Kette (0–1)
- * @param wearStrength  Wie groß diese Löcher werden (0–1)
+ * @param wear          Anteil der Glieder mit Einschlägen entlang der ganzen Kette (0–1)
+ * @param wearStrength  Wie groß diese Einschläge werden (0–1)
  * @param fragments     Anzahl Bruchstücke, die unter einer zerfallenden Kette schweben
  * @param fragmentFall  Wie weit die Bruchstücke nach unten treiben, bevor sie verschwinden (Blöcke)
  */
 public record DamageSettings(float brokenChance, int brokenLinks, float wear, float wearStrength,
                              int fragments, float fragmentFall) {
 
-    public static final DamageSettings DEFAULT = new DamageSettings(0.7F, 4, 0.06F, 0.3F, 18, 40F);
+    public static final DamageSettings DEFAULT = new DamageSettings(0.7F, 4, 0.12F, 0.6F, 6, 40F);
 
     public static final Codec<DamageSettings> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.floatRange(0F, 1F).optionalFieldOf("brokenChance", DEFAULT.brokenChance()).forGetter(DamageSettings::brokenChance),

@@ -38,11 +38,12 @@ Wichtige Werte in `02_chains.json` → `chains`:
 | `linkLength` / `linkWidth` / `thickness` | Größe der Glieder | 11 / 7 / 1.45 |
 | `spikes` | Dornen pro Seite eines Glieds (0 = glatt) | 2 |
 | `lean` | Maximale Schräglage einer Kette (Grad) | 14 |
+| `topFade` | Über wie viele Blöcke die Kette oben aus dem Nichts eingeblendet wird | 90 |
 | `swingDegrees` / `swingSpeed` | Pendel-Ausschlag und Tempo | 3 / 1 |
 | `wave` | Wie stark sich die Kette beim Pendeln biegt | 0.6 |
 | `seed` | Andere Zahl = andere Verteilung | 2424 |
 
-Unter `damage`: `brokenChance` (Anteil zerfallender Ketten), `brokenLinks` (wie viele Glieder am Ende zerfallen), `wear` / `wearStrength` (kleine Schäden mitten in der Kette), `fragments` / `fragmentFall` (Kristall-Splitter unter dem Ende).
+Unter `damage`: `brokenChance` (Anteil zerfallender Ketten), `brokenLinks` (wie viele Glieder am Ende zerfallen), `wear` / `wearStrength` (Anteil und Größe der Einschläge entlang der ganzen Kette), `fragments` / `fragmentFall` (Kristall-Splitter unter dem Ende).
 
 Weitere Schalter: `hideClouds` (Vanilla-Wolken aus, Standard `true`), `nearDistance` (bis zu dieser Entfernung sind Ketten echte 3D-Objekte in der Welt, Standard 220).
 
