@@ -22,6 +22,7 @@ dependencies {
     implementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
     // Nuit wird nur zum Kompilieren gebraucht – im Spiel muss es separat installiert sein
     compileOnly "maven.modrinth:nuit:${project.nuit_version}"
+    compileOnly "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 }
 
 java {
