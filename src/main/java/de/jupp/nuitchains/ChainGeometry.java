@@ -18,9 +18,9 @@ import java.util.List;
  */
 public final class ChainGeometry {
 
-    /** Empfängt ein fertiges Viereck: 4 Punkte (x,y,z relativ zur Kamera), je u,v, und eine Deckkraft (0..1). */
+    /** Empfängt ein fertiges Viereck: 4 Punkte (x,y,z relativ zur Kamera), je u,v und je eine Deckkraft (0..1). */
     public interface QuadSink {
-        void quad(float[] xyz, float[] uv, float alpha);
+        void quad(float[] xyz, float[] uv, float[] alpha);
     }
 
     /** Eine Kette, die in diesem Frame gezeichnet wird. */
@@ -42,7 +42,15 @@ public final class ChainGeometry {
     private final List<Part> parts = new ArrayList<>();
     private long[] partOrder = new long[64];
 
+    private final float glowStrength;
+
     public ChainGeometry(ChainSettings settings, DamageSettings damage, VariationSettings variation, MotionSettings motion) {
+        this(settings, damage, variation, motion, 0.3F);
+    }
+
+    public ChainGeometry(ChainSettings settings, DamageSettings damage, VariationSettings variation, MotionSettings motion,
+                         float glowStrength) {
+        this.glowStrength = glowStrength;
         this.s = settings;
         this.dmg = damage;
         this.var = variation;
@@ -190,7 +198,17 @@ public final class ChainGeometry {
         boolean hit;      // Einschlag statt Zerfall
         double scale = 1; // Größe des Glieds
         double pulse = 1; // Glühen der Bruchkanten (pulsiert)
-        float alpha;      // oben ausblenden
+        float alpha;      // grobe Deckkraft des ganzen Teils (zum Überspringen)
+        double topRelY;   // Aufhängehöhe relativ zur Kamera (für weiches Ausblenden pro Ecke)
+        double fadeLen;   // Länge des Ausblendens
+        float shardAlpha = 1F;
+    }
+
+    /** Weiches Ausblenden nach oben: 0 an der Aufhängung, 1 nach {@code fadeLen} Blöcken – sehr sanfter Start. */
+    static float topAlpha(double drop, double fadeLen) {
+        double x = Math.min(1, Math.max(0, drop / fadeLen));
+        double sm = x * x * x * (x * (x * 6 - 15) + 10);           // smootherstep
+        return (float) Math.pow(sm, 1.35);
     }
 
     private Part part(int idx) {
@@ -199,7 +217,7 @@ public final class ChainGeometry {
     }
 
     public int build(Chain c, double ex, double ey, double ez, double timeSec, QuadSink sink) {
-        return build(c, ex, ey, ez, timeSec, sink, sink, 0);
+        return build(c, ex, ey, ez, timeSec, sink, sink, null, 0);
     }
 
     /**
@@ -208,9 +226,9 @@ public final class ChainGeometry {
      * alle anderen an {@code farSink} (Himmel).
      */
     public int build(Chain c, double ex, double ey, double ez, double timeSec,
-                     QuadSink farSink, QuadSink nearSink, double splitDistance) {
+                     QuadSink farSink, QuadSink nearSink, QuadSink glowSink, double splitDistance) {
         double split2 = splitDistance * splitDistance;
-        double topFade = Math.max(0.01, s.topFade());
+        double topFade = Math.max(0.01, s.topFade() * Math.sqrt(c.scale()));
         double scale = c.scale();
         double pitch = pitch() * scale;
         double swing = Math.toRadians(s.swingDegrees());
@@ -228,6 +246,18 @@ public final class ChainGeometry {
         double torsionT = timeSec * 0.045 * mot.torsionSpeed() / Math.sqrt(scale);
         double torsionNow = torsion * (0.65 * Math.sin(torsionT * 2 * Math.PI + c.phase2()) + 0.35 * noise1(torsionT * 1.7, c.hash()));
         double pulseBase = mot.emberPulse();
+        // Welle, die langsam von oben nach unten durch die Kette läuft (unten etwas stärker – wie eine Peitsche)
+        double waveAmp = Math.toRadians(mot.waveDegrees());
+        double waveK = 2 * Math.PI / Math.max(2, mot.waveLength() / Math.sqrt(scale));
+        double waveW = 2 * Math.PI / (mot.wavePeriod() * Math.sqrt(scale));
+        double waveDir = c.swingAxis() + Math.PI * 0.5 + 0.7 * noise1(timeSec * 0.015, c.hash() ^ 0x77L);
+        double wdx = Math.cos(waveDir), wdz = Math.sin(waveDir);
+        double topRelY = c.ay() - ey;
+        if (this.glowX.length < c.links() + 1) {
+            this.glowX = new double[c.links() * 2 + 2]; this.glowY = new double[c.links() * 2 + 2];
+            this.glowZ = new double[c.links() * 2 + 2]; this.glowA = new double[c.links() * 2 + 2];
+        }
+        this.glowX[0] = c.ax() - ex; this.glowY[0] = c.ay() - ey; this.glowZ[0] = c.az() - ez; this.glowA[0] = 0;
 
         int nLinks = c.links();
         int nParts = 0;
@@ -249,6 +279,13 @@ public final class ChainGeometry {
             sz += Math.sin(windMag) * Math.sin(windDir);
             // unten schwingt es etwas weiter aus als oben
             double reach = 0.6 + 0.4 * f;
+            // Welle: wandert nach unten, oben kaum, unten etwas mehr Ausschlag
+            double phase = waveK * i - waveW * timeSec + c.phase1();
+            double wa = waveAmp * (0.2 + 0.8 * f) * (0.75 + 0.25 * Math.sin(timeSec * 0.13 + c.phase2()));
+            double wv = Math.sin(wa * Math.sin(phase));
+            double wv2 = Math.sin(0.35 * wa * Math.sin(phase * 0.71 + 1.3));
+            sx += wv * wdx - wv2 * wdz;
+            sz += wv * wdz + wv2 * wdx;
             double ux = c.leanX() + sx * reach;
             double uz = c.leanZ() + sz * reach;
             double uy = -Math.sqrt(Math.max(0.0001, 1 - ux * ux - uz * uz));
@@ -264,6 +301,7 @@ public final class ChainGeometry {
             p.cy = py + uy * pitch * 0.5 - ey;
             p.cz = pz + uz * pitch * 0.5 - ez;
             px += ux * pitch; py += uy * pitch; pz += uz * pitch;
+            this.glowX[i + 1] = px - ex; this.glowY[i + 1] = py - ey; this.glowZ[i + 1] = pz - ez;
 
             double tw = c.twist() + (i & 1) * Math.PI * 0.5 + (rnd(c.hash(), 100 + i) - 0.5) * 0.12 + torsionNow * f;
             double rx = Math.cos(tw), rz = Math.sin(tw);
@@ -293,9 +331,17 @@ public final class ChainGeometry {
             }
             p.damage = damage;
             p.hit = hit;
-            // oben langsam aus dem Nichts einblenden
-            double fromTop = (i + 0.5) * pitch;
-            p.alpha = (float) smooth(0, topFade, fromTop);
+            // oben langsam aus dem Nichts einblenden (pro Ecke, siehe LinkMesh.emit)
+            p.topRelY = topRelY;
+            p.fadeLen = topFade;
+            p.shardAlpha = 1F;
+            p.alpha = topAlpha(topRelY - (p.cy - pitch), topFade);   // Unterkante des Glieds
+            // Leuchten: zum Ende hin weich auslaufen (bei zerfallenden Ketten schon vor den zerfallenen Gliedern),
+            // beschädigte Glieder glühen etwas stärker
+            double endFade = c.broken()
+                    ? 1 - smooth(nLinks - c.brokenLinks() - 1.5, nLinks - c.brokenLinks() * 0.4, i + 1)
+                    : 1 - smooth(nLinks - 2.5, nLinks, i + 1);
+            this.glowA[i + 1] = topAlpha(topRelY - (py - ey), topFade) * endFade * (1 + 0.9 * Math.min(1, damage * 1.5));
         }
 
         // Kristall-Splitter unter einem zerfallenden Ende
@@ -323,11 +369,14 @@ public final class ChainGeometry {
                 p.sx = size * life01 * (0.5 + 0.7 * rnd(fh, 11));
                 p.sy = size * life01 * (1.2 + 1.6 * rnd(fh, 12)); // länglich wie Splitter
                 p.sz = size * life01 * (0.4 + 0.5 * rnd(fh, 13));
-                p.glow = 0.35 + 0.65 * rnd(fh, 14);
+                p.glow = 0.75 + 0.25 * rnd(fh, 14);               // glühende Tropfen
                 p.seed = fh;
                 p.damage = 0;
                 p.hit = false;
                 p.alpha = 1F;
+                p.topRelY = topRelY;
+                p.fadeLen = topFade;
+                p.shardAlpha = (float) (smooth(0, 0.08, age) * smooth(0, 0.25, 1 - age));
             }
         }
 
@@ -343,8 +392,7 @@ public final class ChainGeometry {
             Part p = this.parts.get((int) (this.partOrder[q] & 0xFFFFFFFFL));
             double d2 = p.cx * p.cx + p.cy * p.cy + p.cz * p.cz;
             if (p.alpha <= 0.004F) continue;
-            // halbtransparente Teile immer im Himmel zeichnen (Welt-Durchgang ist undurchsichtig)
-            QuadSink sink = d2 < split2 && p.alpha >= 0.999F ? nearSink : farSink;
+            QuadSink sink = d2 < split2 ? nearSink : farSink;
             if (p.shard) {
                 count += emitShard(p, sink);
             } else {
@@ -354,7 +402,49 @@ public final class ChainGeometry {
                 count += mesh.emit(p, sink);
             }
         }
+        if (glowSink != null && this.glowStrength > 0) {
+            emitGlow(c, nLinks + 1, glowSink);
+        }
         return count;
+    }
+
+    // ------------------------------------------------------------------ Leuchten um die Kette
+
+    private double[] glowX = new double[64], glowY = new double[64], glowZ = new double[64], glowA = new double[64];
+    private final float[] gxyz = new float[12];
+    private final float[] guv = new float[8];
+    private final float[] galpha = new float[4];
+
+    /** Weiches Band entlang der Kettenmitte, immer zur Kamera gedreht – wirkt wie ein Leuchten (Bloom). */
+    private void emitGlow(Chain c, int n, QuadSink sink) {
+        double hw = s.linkWidth() * c.scale() * 1.35;
+        double prevLx = 0, prevLy = 0, prevLz = 0, prevRx = 0, prevRy = 0, prevRz = 0;
+        float prevA = 0;
+        for (int i = 0; i < n; i++) {
+            int a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1);
+            double tx = glowX[b] - glowX[a], ty = glowY[b] - glowY[a], tz = glowZ[b] - glowZ[a];
+            double x = glowX[i], y = glowY[i], z = glowZ[i];
+            // Seite = Blickrichtung × Kettenrichtung
+            double sx = y * tz - z * ty, sy = z * tx - x * tz, sz = x * ty - y * tx;
+            double sl = Math.sqrt(sx * sx + sy * sy + sz * sz);
+            if (sl < 1e-6) { sx = 1; sy = 0; sz = 0; sl = 1; }
+            sx *= hw / sl; sy *= hw / sl; sz *= hw / sl;
+            float al = (float) (Math.min(1.0, glowA[i]) * this.glowStrength);
+            if (i > 0 && (al > 0.003F || prevA > 0.003F)) {
+                put4(gxyz, 0, prevLx, prevLy, prevLz); put4(gxyz, 1, x - sx, y - sy, z - sz);
+                put4(gxyz, 2, x + sx, y + sy, z + sz); put4(gxyz, 3, prevRx, prevRy, prevRz);
+                guv[0] = 0; guv[1] = 0.5F; guv[2] = 0; guv[3] = 0.5F; guv[4] = 1; guv[5] = 0.5F; guv[6] = 1; guv[7] = 0.5F;
+                galpha[0] = prevA; galpha[1] = al; galpha[2] = al; galpha[3] = prevA;
+                sink.quad(gxyz, guv, galpha);
+            }
+            prevLx = x - sx; prevLy = y - sy; prevLz = z - sz;
+            prevRx = x + sx; prevRy = y + sy; prevRz = z + sz;
+            prevA = al;
+        }
+    }
+
+    private static void put4(float[] arr, int k, double x, double y, double z) {
+        arr[k * 3] = (float) x; arr[k * 3 + 1] = (float) y; arr[k * 3 + 2] = (float) z;
     }
 
     private static void setRotation(Part p, double kx, double ky, double kz, double a) {
@@ -371,6 +461,7 @@ public final class ChainGeometry {
     };
     private final float[] fxyz = new float[12];
     private final float[] fuv = new float[8];
+    private final float[] falpha = new float[4];
     private final double[] corner = new double[18];
 
     private int emitShard(Part p, QuadSink sink) {
@@ -412,7 +503,9 @@ public final class ChainGeometry {
                 fuv[t * 2] = (float) (0.02 + 0.96 * g);
                 fuv[t * 2 + 1] = v;
             }
-            sink.quad(fxyz, fuv, p.alpha);
+            float sa = p.shardAlpha * topAlpha(p.topRelY - fxyz[1], p.fadeLen);
+            falpha[0] = sa; falpha[1] = sa; falpha[2] = sa; falpha[3] = sa;
+            sink.quad(fxyz, fuv, falpha);
             n++;
         }
         return n;
@@ -437,7 +530,8 @@ public final class ChainGeometry {
         final double straight, b;
         final double noiseScale;
 
-        private final float[] vx, vy, vz, vV, vU;
+        private final float[] vx, vy, vz, vV, vU, vA;
+        private final float[] qa = new float[4];
         private final boolean[] removed;
         private long[] order;
         private final float[] qxyz = new float[12];
@@ -537,7 +631,7 @@ public final class ChainGeometry {
             this.quads = new int[nq * 4];
             for (int q = 0; q < nq; q++) System.arraycopy(quadList.get(q), 0, this.quads, q * 4, 4);
             this.noiseScale = 1.0 / Math.max(0.05, r * 2.2);
-            vx = new float[nv]; vy = new float[nv]; vz = new float[nv]; vV = new float[nv]; vU = new float[nv];
+            vx = new float[nv]; vy = new float[nv]; vz = new float[nv]; vV = new float[nv]; vU = new float[nv]; vA = new float[nv];
             removed = new boolean[nq];
             order = new long[nq];
         }
@@ -603,6 +697,7 @@ public final class ChainGeometry {
                 }
                 vU[idx] = (float) (0.02 + 0.96 * glow * p.pulse);
                 vx[idx] = (float) x; vy[idx] = (float) y; vz[idx] = (float) z;
+                vA[idx] = topAlpha(p.topRelY - y, p.fadeLen);
             }
 
             int visible = 0;
@@ -634,8 +729,9 @@ public final class ChainGeometry {
                     // Innenseite eines aufgebrochenen Glieds: glühender Kern
                     quv[t * 2] = inside ? (float) (0.9 * p.pulse) : vU[vi];
                     quv[t * 2 + 1] = inside ? 0.45F : vV[vi];
+                    qa[t] = vA[vi];
                 }
-                sink.quad(qxyz, quv, p.alpha);
+                sink.quad(qxyz, quv, qa);
             }
             return visible;
         }

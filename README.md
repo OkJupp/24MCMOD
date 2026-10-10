@@ -42,8 +42,8 @@ Wichtige Werte in `05_chains.json` → `chains`:
 | `linkLength` / `linkWidth` / `thickness` | Größe der Glieder | 11 / 7 / 1.45 |
 | `spikes` | Dornen pro Seite eines Glieds (0 = glatt) | 2 |
 | `lean` | Maximale Schräglage einer Kette (Grad) | 14 |
-| `topFade` | Über wie viele Blöcke die Kette oben aus dem Nichts eingeblendet wird | 90 |
-| `swingDegrees` / `swingSpeed` | Pendel-Ausschlag und Tempo | 3 / 1 |
+| `topFade` | Über wie viele Blöcke die Kette oben weich aus dem Nichts eingeblendet wird | 150 |
+| `swingDegrees` / `swingSpeed` | Pendel-Ausschlag und Tempo | 1 / 1 |
 | `wave` | Wie stark sich die Kette beim Pendeln biegt | 0.6 |
 | `seed` | Andere Zahl = andere Verteilung | 2424 |
 
@@ -51,11 +51,11 @@ Unter `damage`: `brokenChance` (Anteil zerfallender Ketten), `brokenLinks` (wie 
 
 Unter `variation`: `sizeMin` / `sizeMax` (Größenbereich der Ketten), `giantChance` / `giantSize` (seltene Riesen-Ketten), `topYVariation` (wie stark die Aufhängehöhe schwankt), `minBottomY` (tiefster Punkt, bis zu dem eine Kette hängen darf – Standard 230).
 
-Unter `motion`: `windStrength` / `windSpeed` (gemeinsame, weiche Windböen für alle Ketten), `torsionDegrees` / `torsionSpeed` (Ketten drehen sich langsam um sich selbst), `emberPulse` (wie stark die glühenden Bruchkanten pulsieren).
+Unter `motion`: `windStrength` / `windSpeed` (gemeinsame, weiche Windböen für alle Ketten), `torsionDegrees` / `torsionSpeed` (Ketten drehen sich langsam um sich selbst), `emberPulse` (wie stark die glühenden Bruchkanten pulsieren), `waveDegrees` / `waveLength` / `wavePeriod` (leichte Welle, die wie bei einer Peitsche von oben nach unten durch die Kette läuft: Stärke, Länge in Gliedern, Sekunden pro Welle). Alles läuft nur über die Zeit – Spieler in der Nähe verändern nichts.
 
 Weitere Schalter: `hideClouds` (Vanilla-Wolken **und** die LOD-Wolken von Distant Horizons aus, Standard `true` – deine DH-Einstellungsdatei bleibt dabei unverändert), `nearDistance` (bis zu dieser Entfernung sind Ketten echte 3D-Objekte in der Welt, Standard 220).
 
-`tint` färbt die Ketten ein, z. B. `{ "red": 1, "green": 0.6, "blue": 0.9 }`.
+`glow` = Stärke des Leuchtens um die Ketten (0 = aus, Standard 0.32; leuchtet bei Blitzen kurz mit auf). `tint` färbt die Ketten ein, z. B. `{ "red": 1, "green": 0.6, "blue": 0.9 }`.
 
 ### Blitze (`04_lightning.json` → `lightning`)
 

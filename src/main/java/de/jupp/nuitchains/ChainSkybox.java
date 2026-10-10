@@ -10,7 +10,6 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import me.flashyreese.mods.nuit.api.skyboxes.SkyboxRenderContext;
 import me.flashyreese.mods.nuit.api.skyboxes.SkyboxTextureProvider;
-import me.flashyreese.mods.nuit.components.Blend;
 import me.flashyreese.mods.nuit.components.Conditions;
 import me.flashyreese.mods.nuit.components.Properties;
 import me.flashyreese.mods.nuit.components.RGBA;
@@ -49,7 +48,8 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
     private static final RGBA WHITE = new RGBA(1F, 1F, 1F, 1F);
     /** Radius der "Heranzieh"-Kugel im Himmel, muss kleiner als die Nuit-Skybox (100) sein. */
     private static final double SKY_RADIUS = 92.0;
-    private static final int FLOATS_PER_QUAD = 21; // 12 Position + 8 UV + 1 Deckkraft
+    private static final int FLOATS_PER_QUAD = 24; // 12 Position + 8 UV + 4 Deckkraft
+    public static final Identifier GLOW_TEXTURE = NuitChainsClient.id("textures/chain/glow.png");
 
     public static final Codec<ChainSkybox> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Properties.CODEC.optionalFieldOf("properties", Properties.of()).forGetter(AbstractSkybox::getProperties),
@@ -60,6 +60,7 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
             DamageSettings.CODEC.optionalFieldOf("damage", DamageSettings.DEFAULT).forGetter(ChainSkybox::getDamage),
             VariationSettings.CODEC.optionalFieldOf("variation", VariationSettings.DEFAULT).forGetter(ChainSkybox::getVariation),
             MotionSettings.CODEC.optionalFieldOf("motion", MotionSettings.DEFAULT).forGetter(ChainSkybox::getMotion),
+            Codec.floatRange(0F, 3F).optionalFieldOf("glow", 0.32F).forGetter(ChainSkybox::getGlow),
             Codec.floatRange(0F, 1000F).optionalFieldOf("nearDistance", 220F).forGetter(ChainSkybox::getNearDistance),
             Codec.BOOL.optionalFieldOf("hideClouds", true).forGetter(ChainSkybox::isHideClouds)
     ).apply(instance, ChainSkybox::new));
@@ -70,32 +71,39 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
     private final DamageSettings damage;
     private final VariationSettings variation;
     private final MotionSettings motion;
+    private final float glow;
     private final float nearDistance;
     private final boolean hideClouds;
     private final ChainGeometry geometry;
 
-    /** Ferne Vierecke dieses Bildes, je Kette – vom Welt-Durchgang vorbereitet. */
+    /** Ferne Vierecke und Leuchten dieses Bildes, je Kette – vom Welt-Durchgang vorbereitet. */
     private final List<FarChain> farChains = new ArrayList<>();
     private boolean farPrepared;
 
-    private static final class FarChain {
+    /** Puffer für Vierecke (Position, UV, Deckkraft pro Ecke). */
+    static final class QuadBuffer {
         float[] data = new float[FLOATS_PER_QUAD * 256];
         int quads;
-        float fade;
 
-        void add(float[] xyz, float[] uv, float alpha) {
+        void add(float[] xyz, float[] uv, float[] alpha) {
             int o = this.quads * FLOATS_PER_QUAD;
             if (o + FLOATS_PER_QUAD > this.data.length) this.data = Arrays.copyOf(this.data, this.data.length * 2);
             System.arraycopy(xyz, 0, this.data, o, 12);
             System.arraycopy(uv, 0, this.data, o + 12, 8);
-            this.data[o + 20] = alpha;
+            System.arraycopy(alpha, 0, this.data, o + 20, 4);
             this.quads++;
         }
     }
 
+    private static final class FarChain {
+        final QuadBuffer body = new QuadBuffer();
+        final QuadBuffer glow = new QuadBuffer();
+        float fade;
+    }
+
     public ChainSkybox(Properties properties, Conditions conditions, Identifier texture, RGBA tint,
                        ChainSettings settings, DamageSettings damage, VariationSettings variation,
-                       MotionSettings motion, float nearDistance, boolean hideClouds) {
+                       MotionSettings motion, float glow, float nearDistance, boolean hideClouds) {
         super(properties, conditions);
         this.texture = texture;
         this.tint = tint;
@@ -103,16 +111,33 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
         this.damage = damage;
         this.variation = variation;
         this.motion = motion;
+        this.glow = glow;
         this.nearDistance = nearDistance;
         this.hideClouds = hideClouds;
-        this.geometry = new ChainGeometry(settings, damage, variation, motion);
+        this.geometry = new ChainGeometry(settings, damage, variation, motion, glow);
+    }
+
+    private FarChain farChain(int index, float fade) {
+        while (this.farChains.size() <= index) this.farChains.add(new FarChain());
+        FarChain far = this.farChains.get(index);
+        far.body.quads = 0;
+        far.glow.quads = 0;
+        far.fade = fade;
+        return far;
+    }
+
+    private void clearFrom(int index) {
+        for (int i = index; i < this.farChains.size(); i++) {
+            this.farChains.get(i).body.quads = 0;
+            this.farChains.get(i).glow.quads = 0;
+        }
     }
 
     // ------------------------------------------------------------------ Welt-Durchgang (läuft vor dem Himmel)
 
     /**
      * Wird pro Bild beim Sammeln der Welt-Geometrie aufgerufen: nahe Teile direkt einreichen,
-     * ferne Teile für den Himmel-Durchgang merken.
+     * ferne Teile und das Leuchten für den Himmel-Durchgang merken.
      */
     public void prepareFrame(SubmitNodeCollector collector, PoseStack poseStack, Vec3 eye, double timeSec, float depthFar) {
         this.farPrepared = false;
@@ -121,30 +146,21 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
         }
         double split = Math.min(this.nearDistance, depthFar * 0.8);
         List<ChainGeometry.Chain> chains = this.geometry.collect(eye.x, eye.y, eye.z);
-        FloatList near = this.nearList;
-        near.size = 0;
+        QuadBuffer near = this.nearBuffer;
+        near.quads = 0;
         int used = 0;
         for (ChainGeometry.Chain chain : chains) {
-            FarChain far = used < this.farChains.size() ? this.farChains.get(used) : null;
-            if (far == null) {
-                far = new FarChain();
-                this.farChains.add(far);
-            }
-            far.quads = 0;
-            far.fade = (float) chain.fade();
-            used++;
-            final FarChain target = far;
-            this.geometry.build(chain, eye.x, eye.y, eye.z, timeSec, target::add, near::addQuad, split);
+            FarChain far = farChain(used++, (float) chain.fade());
+            this.geometry.build(chain, eye.x, eye.y, eye.z, timeSec, far.body::add, near::add, far.glow::add, split);
         }
-        for (int i = used; i < this.farChains.size(); i++) {
-            this.farChains.get(i).quads = 0;
-        }
+        clearFrom(used);
         this.farPrepared = true;
 
-        if (near.size > 0) {
+        if (near.quads > 0) {
             final float[] data = near.data;
-            final int count = near.size / FLOATS_PER_QUAD;
+            final int count = near.quads;
             final float r = this.tint.getRed(), g = this.tint.getGreen(), b = this.tint.getBlue();
+            final float a = this.tint.getAlpha() * this.alpha;
             RenderType type = ChainRenderTypes.chains(this.texture);
             collector.submitCustomGeometry(poseStack, type, (pose, buffer) -> {
                 for (int q = 0; q < count; q++) {
@@ -152,27 +168,14 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
                     for (int v = 0; v < 4; v++) {
                         buffer.addVertex(pose, data[o + v * 3], data[o + v * 3 + 1], data[o + v * 3 + 2])
                                 .setUv(data[o + 12 + v * 2], data[o + 13 + v * 2])
-                                .setColor(r, g, b, 1.0F);
+                                .setColor(r, g, b, a * data[o + 20 + v]);
                     }
                 }
             });
         }
     }
 
-    private final FloatList nearList = new FloatList();
-
-    private static final class FloatList {
-        float[] data = new float[FLOATS_PER_QUAD * 512];
-        int size;
-
-        void addQuad(float[] xyz, float[] uv, float alpha) {
-            if (this.size + FLOATS_PER_QUAD > this.data.length) this.data = Arrays.copyOf(this.data, this.data.length * 2);
-            System.arraycopy(xyz, 0, this.data, this.size, 12);
-            System.arraycopy(uv, 0, this.data, this.size + 12, 8);
-            this.data[this.size + 20] = alpha;
-            this.size += FLOATS_PER_QUAD;
-        }
-    }
+    private final QuadBuffer nearBuffer = new QuadBuffer();
 
     // ------------------------------------------------------------------ Himmel-Durchgang (Nuit)
 
@@ -194,60 +197,42 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
             List<ChainGeometry.Chain> chains = this.geometry.collect(eye.x, eye.y, eye.z);
             int used = 0;
             for (ChainGeometry.Chain chain : chains) {
-                FarChain far = used < this.farChains.size() ? this.farChains.get(used) : null;
-                if (far == null) {
-                    far = new FarChain();
-                    this.farChains.add(far);
-                }
-                far.quads = 0;
-                far.fade = (float) chain.fade();
-                used++;
-                this.geometry.build(chain, eye.x, eye.y, eye.z, timeSec, far::add);
+                FarChain far = farChain(used++, (float) chain.fade());
+                this.geometry.build(chain, eye.x, eye.y, eye.z, timeSec, far.body::add, far.body::add, far.glow::add, 0);
             }
-            for (int i = used; i < this.farChains.size(); i++) {
-                this.farChains.get(i).quads = 0;
-            }
+            clearFrom(used);
         }
         this.farPrepared = false;
 
         context.applyFog();
         Matrix4f modelView = new Matrix4f(context.skyModelViewStack());
-        RenderPipeline pipeline = NuitRenderPipelines.texturedSkybox(Blend.normal().getBlendFunction());
+        // Ketten leuchten kurz mit auf, wenn es blitzt
+        float flash = LightningSkybox.currentFlash;
+        float glowMul = 1F + 1.8F * flash;
 
         for (FarChain chain : this.farChains) {
-            // aufeinanderfolgende Vierecke mit gleicher Deckkraft-Stufe in einem Aufruf zeichnen
-            int q = 0;
-            while (q < chain.quads) {
-                int level = alphaLevel(chain.data[q * FLOATS_PER_QUAD + 20]);
-                int end = q + 1;
-                while (end < chain.quads && alphaLevel(chain.data[end * FLOATS_PER_QUAD + 20]) == level) end++;
-                float alphaMul = level / (float) ALPHA_LEVELS;
-                if (alphaMul > 0) {
-                    drawFar(pipeline, modelView, chain, q, end, chain.fade * alphaMul);
-                }
-                q = end;
+            if (chain.glow.quads > 0) {
+                draw(ChainRenderTypes.skyGlow(), GLOW_TEXTURE, modelView, chain.glow, Math.min(1F, chain.fade * glowMul));
+            }
+            if (chain.body.quads > 0) {
+                draw(ChainRenderTypes.skyChains(), this.texture, modelView, chain.body, chain.fade);
             }
         }
     }
 
-    private static final int ALPHA_LEVELS = 24;
-
-    private static int alphaLevel(float alpha) {
-        return Math.round(Math.max(0F, Math.min(1F, alpha)) * ALPHA_LEVELS);
-    }
-
-    private void drawFar(RenderPipeline pipeline, Matrix4f modelView, FarChain chain, int from, int to, float alpha) {
-        try (ByteBufferBuilder byteBufferBuilder = NuitRenderPipelines.byteBufferBuilder(pipeline, (to - from) * 4)) {
+    private void draw(RenderPipeline pipeline, Identifier tex, Matrix4f modelView, QuadBuffer buf, float alpha) {
+        try (ByteBufferBuilder byteBufferBuilder = NuitRenderPipelines.byteBufferBuilder(pipeline, buf.quads * 4)) {
             BufferBuilder builder = NuitRenderPipelines.bufferBuilder(byteBufferBuilder, pipeline);
-            float[] d = chain.data;
-            for (int q = from; q < to; q++) {
+            float[] d = buf.data;
+            for (int q = 0; q < buf.quads; q++) {
                 int o = q * FLOATS_PER_QUAD;
                 for (int v = 0; v < 4; v++) {
                     double x = d[o + v * 3], y = d[o + v * 3 + 1], z = d[o + v * 3 + 2];
                     double dist = Math.sqrt(x * x + y * y + z * z);
                     double sc = dist > SKY_RADIUS ? SKY_RADIUS / dist : 1.0; // Richtung bleibt gleich
                     builder.addVertex((float) (x * sc), (float) (y * sc), (float) (z * sc))
-                            .setUv(d[o + 12 + v * 2], d[o + 13 + v * 2]);
+                            .setUv(d[o + 12 + v * 2], d[o + 13 + v * 2])
+                            .setColor(1F, 1F, 1F, d[o + 20 + v]);
                 }
             }
             MeshData mesh = builder.build();
@@ -258,13 +243,13 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
                     this.tint.getRed(), this.tint.getGreen(), this.tint.getBlue(),
                     this.tint.getAlpha() * this.alpha * alpha);
             GpuBufferSlice transforms = NuitRenderBackend.createDynamicTransforms(modelView, color);
-            NuitRenderBackend.drawTextured(pipeline, mesh, transforms, NuitRenderBackend.SAMPLER0_NAME, this.texture);
+            NuitRenderBackend.drawTextured(pipeline, mesh, transforms, NuitRenderBackend.SAMPLER0_NAME, tex);
         }
     }
 
     @Override
     public Collection<Identifier> getTexturesToRegister() {
-        return List.of(this.texture);
+        return List.of(this.texture, GLOW_TEXTURE);
     }
 
     public Identifier getTexture() {
@@ -285,6 +270,10 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
 
     public VariationSettings getVariation() {
         return this.variation;
+    }
+
+    public float getGlow() {
+        return this.glow;
     }
 
     public MotionSettings getMotion() {

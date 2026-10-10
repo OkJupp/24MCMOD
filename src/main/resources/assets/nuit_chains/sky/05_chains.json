@@ -6,6 +6,7 @@
     "green": 0.95,
     "blue": 1.0
   },
+  "glow": 0.32,
   "hideClouds": true,
   "nearDistance": 220,
   "chains": {
@@ -20,8 +21,8 @@
     "thickness": 1.45,
     "lean": 14,
     "spikes": 2,
-    "topFade": 90,
-    "swingDegrees": 3.0,
+    "topFade": 150,
+    "swingDegrees": 1.0,
     "swingSpeed": 1.0,
     "wave": 0.6,
     "seed": 2424
@@ -43,11 +44,14 @@
     "minBottomY": 230
   },
   "motion": {
-    "windStrength": 3.5,
+    "windStrength": 1.0,
     "windSpeed": 1.0,
-    "torsionDegrees": 28,
+    "torsionDegrees": 14,
     "torsionSpeed": 1.0,
-    "emberPulse": 0.35
+    "emberPulse": 0.35,
+    "waveDegrees": 3.2,
+    "waveLength": 16,
+    "wavePeriod": 5.5
   },
   "properties": {
     "layer": 5
