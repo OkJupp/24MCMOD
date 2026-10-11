@@ -29,7 +29,7 @@ public record ChainSettings(int spacing, float chance, int cellRadius, float top
                             float thickness, float lean, int spikes, float topFade, float swingDegrees, float swingSpeed, float wave, int seed) {
 
     public static final ChainSettings DEFAULT = new ChainSettings(
-            180, 0.62F, 5, 450F,
+            180, 0.48F, 5, 450F,
             120F, 220F, 18.0F, 11.5F,
             1.85F, 12F, 1, 150F, 1.0F, 1.0F, 0.6F, 2424);
 
