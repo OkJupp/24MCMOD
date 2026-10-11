@@ -7,7 +7,10 @@ diagonal im Bild, und die Halte-Positionen von Vanilla-Schwertern passen.
   - zwei gekreuzte Rauch-Flächen mit animiertem, leicht glühendem Rauch
 
 Aufruf: gen_dagger.py PACK_ASSETS_DIR
-  (schreibt minecraft/models/item/totem_of_undying.json und nuit_chains/textures/item/smoke_dagger/*)
+  (schreibt minecraft/items/totem_of_undying.json, nuit_chains/models/item/smoke_dagger.json
+   und nuit_chains/textures/item/smoke_dagger/*)
+Die Item-Definition (items/totem_of_undying.json) wird mit überschrieben – sonst gewinnen Pakete wie
+"Enchantment Glows", die dort für Hand und Totem-Animation eigene 3D-Totems eintragen.
 """
 import json
 import os
@@ -18,7 +21,8 @@ from PIL import Image
 
 OUT = sys.argv[1]
 TEX_DIR = os.path.join(OUT, "nuit_chains", "textures", "item", "smoke_dagger")
-MODEL = os.path.join(OUT, "minecraft", "models", "item", "totem_of_undying.json")
+MODEL = os.path.join(OUT, "nuit_chains", "models", "item", "smoke_dagger.json")
+ITEM_DEF = os.path.join(OUT, "minecraft", "items", "totem_of_undying.json")
 os.makedirs(TEX_DIR, exist_ok=True)
 os.makedirs(os.path.dirname(MODEL), exist_ok=True)
 T = "nuit_chains:item/smoke_dagger/"
@@ -341,4 +345,7 @@ model = {
 }
 with open(MODEL, "w") as f:
     json.dump(model, f, indent=1)
+os.makedirs(os.path.dirname(ITEM_DEF), exist_ok=True)
+with open(ITEM_DEF, "w") as f:
+    json.dump({"model": {"type": "minecraft:model", "model": "nuit_chains:item/smoke_dagger"}}, f, indent=2)
 print("Modell:", MODEL, "Elemente:", len(elements))
