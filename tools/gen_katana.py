@@ -460,9 +460,9 @@ model = {
         "thirdperson_righthand": {"rotation": [0, -90, 55], "translation": [0, 3.5, 0.5], "scale": [0.75, 0.75, 0.75]},
         "thirdperson_lefthand": {"rotation": [0, 90, -55], "translation": [0, 3.5, 0.5], "scale": [0.75, 0.75, 0.75]},
         # z-Drehung 50 statt 25: Klinge steht aufrechter und zeigt leicht nach vorne (weg von dir)
-        # deutlich höher (y 12), damit Griff und Stichblatt im Bild sind; Klinge ragt dafür weiter nach oben
-        "firstperson_righthand": {"rotation": [0, -90, 50], "translation": [1.13, 12.0, 1.13], "scale": [0.78, 0.78, 0.78]},
-        "firstperson_lefthand": {"rotation": [0, 90, -50], "translation": [1.13, 12.0, 1.13], "scale": [0.78, 0.78, 0.78]},
+        # deutlich höher (y 10), damit Griff und Stichblatt im Bild sind
+        "firstperson_righthand": {"rotation": [0, -90, 50], "translation": [1.13, 10.0, 1.13], "scale": [0.78, 0.78, 0.78]},
+        "firstperson_lefthand": {"rotation": [0, 90, -50], "translation": [1.13, 10.0, 1.13], "scale": [0.78, 0.78, 0.78]},
     },
 }
 with open(MODEL, "w") as f:
