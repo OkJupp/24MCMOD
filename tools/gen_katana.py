@@ -115,53 +115,67 @@ def back_at(y):
 
 
 # ------------------------------------------------------------------ Texturen
-# Klinge: Galaxie, 16 x 160 pro Bild, 8 Bilder (Sterne funkeln, Nebel schimmert)
-BW, BH, BF = 16, 160, 8
+# Energie-Welle: läuft in einem Durchlauf vom Griff zur Spitze (0 = Klingenansatz, 1 = Spitze)
+WF = 16                                    # Bilder pro Durchlauf (je 2 Ticks -> 1,6 s)
+
+
+def wave(pos, f):
+    p = f / WF * 1.35 - 0.15
+    return np.exp(-((pos - p) / 0.07) ** 2) + 0.45 * np.exp(-((pos - p + 0.55) / 0.09) ** 2)
+
+
+# Klinge: Galaxie, 16 x 160 pro Bild (Sterne funkeln, Nebel schimmert, Energie-Welle)
+BW, BH, BF = 16, 160, WF
 neb1 = fbm(BW * 2, BH, 11, base=(2, 10))[:, ::2]
 neb2 = fbm(BW * 2, BH, 23, base=(3, 16))[:, ::2]
 dust = fbm(BW * 2, BH, 37, base=(2, 8))[:, ::2]
 yy, xx = np.mgrid[0:BH, 0:BW]
-deep = hexc("#0a0520") * (1 - yy[..., None] / BH) + hexc("#180a33") * (yy[..., None] / BH)
-pink, violet, blue = hexc("#ff3fb8"), hexc("#8a3cff"), hexc("#3d63ff")
+deep = hexc("#0b0524") * (1 - yy[..., None] / BH) + hexc("#1c0a3a") * (yy[..., None] / BH)
+pink, violet, blue = hexc("#ff3fb8"), hexc("#9a45ff"), hexc("#4a6cff")
 band = np.sin((yy / BH * 2.2 + neb1 * 1.8) * np.pi * 2) * 0.5 + 0.5      # schräge Nebelbänder
-nebula = smooth(0.45, 0.85, neb2) * (0.35 + 0.65 * band)
-base_col = deep + violet * (nebula * 0.85)[..., None] + pink * (smooth(0.55, 0.85, neb2 * band) * 0.75)[..., None] \
-    + blue * (smooth(0.5, 0.78, neb1) * (1 - band) * 0.55)[..., None]
-base_col *= (1 - 0.55 * smooth(0.55, 0.75, dust))[..., None]               # dunkle Staubbahnen
-n_stars = 170
+nebula = smooth(0.42, 0.82, neb2) * (0.35 + 0.65 * band)
+base_col = deep + violet * (nebula * 1.0)[..., None] + pink * (smooth(0.5, 0.82, neb2 * band) * 0.95)[..., None] \
+    + blue * (smooth(0.48, 0.76, neb1) * (1 - band) * 0.65)[..., None]
+base_col += hexc("#ffd0f0") * (smooth(0.72, 0.95, neb2 * band) * 0.35)[..., None]   # helle Nebelkerne
+base_col *= (1 - 0.5 * smooth(0.55, 0.75, dust))[..., None]                # dunkle Staubbahnen
+pos = 1 - (yy + 0.5) / BH                                                  # 0 Ansatz … 1 Spitze
+n_stars = 230
 sx, sy = rng.integers(0, BW, n_stars), rng.integers(0, BH, n_stars)
-sb = rng.random(n_stars) ** 2.2
+sb = rng.random(n_stars) ** 2.0
 sph = rng.random(n_stars)
-scol = np.where((rng.random(n_stars) < 0.3)[:, None], hexc("#ffb3ea"), hexc("#ffffff"))
+scol = np.where((rng.random(n_stars) < 0.35)[:, None], hexc("#ffb3ea"), hexc("#ffffff"))
 frames = []
 for f in range(BF):
     c = base_col.copy()
     shimmer = 0.9 + 0.1 * np.sin(2 * np.pi * (f / BF + neb1 * 2))
-    c *= shimmer[..., None]
+    w = wave(pos, f)
+    c = c * (shimmer * (1 + 0.9 * w))[..., None] + hexc("#ff5fcf") * (0.3 * w)[..., None]
     tw = 0.45 + 0.55 * (0.5 + 0.5 * np.sin(2 * np.pi * (f / BF + sph)))
     for i in range(n_stars):
-        v = np.clip(0.35 + 0.9 * sb[i], 0, 1.2) * tw[i]
+        v = np.clip(0.4 + 0.9 * sb[i], 0, 1.2) * tw[i]
         c[sy[i], sx[i]] = np.maximum(c[sy[i], sx[i]], scol[i] * v)
-        if sb[i] > 0.75:   # helle Sterne mit kleinem Kreuz
+        if sb[i] > 0.7:   # helle Sterne mit kleinem Kreuz
             for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
                 X, Y = sx[i] + dx, sy[i] + dy
                 if 0 <= X < BW and 0 <= Y < BH:
                     c[Y, X] = np.maximum(c[Y, X], scol[i] * v * 0.45)
     frames.append(c)
-save("blade", np.concatenate(frames, 0), frame_h=BH, frametime=3)
+save("blade", np.concatenate(frames, 0), frame_h=BH, frametime=2)
 
-# Schneide 8 x 64: helles Lavendel-Weiß, zur Kante hin heller
-W, H = 8, 64
-col = np.zeros((H, W, 3))
+# Schneide 8 x 128 über die ganze Länge, animiert: Lavendel-Weiß, die Energie-Welle lässt sie pink-weiß aufleuchten
+W, H = 8, 128
 u = (np.arange(W) + 0.5) / W
-col[:] = (hexc("#9d8bff")[None, :] * (1 - u[:, None]) + hexc("#f3e9ff")[None, :] * u[:, None])[None, :, :]
-col[rng.random((H, W)) < 0.05] = hexc("#ffffff")
-save("edge", col)
-
-# Rücken (Mune) 4 x 16: dunkles Metall mit feiner Lichtkante
-col = np.zeros((16, 4, 3)) + hexc("#1b1428")
-col[:, 0] = hexc("#5b4a78")
-save("back", col)
+grad = hexc("#a08cff")[None, :] * (1 - u[:, None]) + hexc("#f6eeff")[None, :] * u[:, None]
+sparkle = rng.random((H, W)) < 0.05
+epos = 1 - (np.arange(H) + 0.5) / H
+frames = []
+for f in range(WF):
+    w = wave(epos, f)[:, None, None]
+    c = np.broadcast_to(grad[None], (H, W, 3)).copy()
+    c = c * (1 - 0.6 * np.minimum(w, 1)) + hexc("#ffd2f4") * 0.6 * np.minimum(w, 1) + hexc("#ff7ad8") * 0.25 * np.minimum(w, 1)
+    c[sparkle] = hexc("#ffffff")
+    frames.append(c)
+save("edge", np.concatenate(frames, 0), frame_h=H, frametime=2)
 
 # Griff 16 x 32: schwarze Wicklung mit violett-pinken Rauten (wie Tsuka-Ito)
 W, H = 16, 32
@@ -256,15 +270,15 @@ for i in range(SEG_MAIN):
     dz = 0.006 * (i % 2)                            # Nachbarn minimal versetzt: keine exakt gleichen Flächen
     b_, e_ = back_at(ym), edge_at(ym)
     split = e_ - EDGE_STRIP
-    v0, v1 = 16 * s1 / L_BLADE, 16 * s0 / L_BLADE
-    fu = [0, r(16 - v0), r(16 * (split - b_) / (EDGE0 - BACK)), r(16 - v1)]
-    faces = {"north": {"uv": fu, "texture": "#blade"}, "south": {"uv": fu, "texture": "#blade"},
-             "west": {"uv": [0, 0, 4, 16], "texture": "#back"}}
-    ef = {"north": {"uv": [0, 0, 16, 16], "texture": "#edge"}, "south": {"uv": [0, 0, 16, 16], "texture": "#edge"},
-          "east": {"uv": [12, 0, 16, 16], "texture": "#edge"}}
+    vt, vb = r(16 - 16 * s1 / L_BLADE), r(16 - 16 * s0 / L_BLADE)   # oben/unten auf der Textur (Spitze = 0)
+    uw = r(16 * (split - b_) / (EDGE0 - BACK))
+    faces = {"north": {"uv": [uw, vt, 0, vb], "texture": "#blade"}, "south": {"uv": [0, vt, uw, vb], "texture": "#blade"},
+             "west": {"uv": [0, vt, 3, vb], "texture": "#blade"}}            # Rücken: Galaxie läuft drumherum
+    ef = {"north": {"uv": [16, vt, 0, vb], "texture": "#edge"}, "south": {"uv": [0, vt, 16, vb], "texture": "#edge"},
+          "east": {"uv": [12, vt, 16, vb], "texture": "#edge"}}
     if i == 0:
-        faces["down"] = {"uv": [0, 0, 4, 2], "texture": "#back"}
-        ef["down"] = {"uv": [12, 0, 16, 2], "texture": "#edge"}
+        faces["down"] = {"uv": [0, 14, 3, 16], "texture": "#blade"}
+        ef["down"] = {"uv": [12, 14, 16, 16], "texture": "#edge"}
     elements.append(rbox(8 + x0c, y0c, b_, split, seg_len, 7.72 - dz, 8.28 + dz, ang, faces, light=6))
     elements.append(rbox(8 + x0c, y0c, split, e_, seg_len, 7.85 - dz, 8.15 + dz, ang, ef, light=8))
 
@@ -279,20 +293,21 @@ for i in range(SEG_TIP):
     b_ = back_at(ym)
     e1 = edge_at(y1w)                                # Schräge am oberen Ende: Stufe bleibt innerhalb der Linie
     top = max(b_ + 0.06, e1 - 0.04)
-    v0, v1 = 16 * s1 / L_BLADE, 16 * s0 / L_BLADE
-    fu = [0, r(16 - v0), r(16 * (top - b_) / (EDGE0 - BACK)), r(16 - v1)]
+    vt, vb = r(16 - 16 * s1 / L_BLADE), r(16 - 16 * s0 / L_BLADE)
+    uw = r(16 * (top - b_) / (EDGE0 - BACK))
     dz = 0.006 * ((i + SEG_MAIN) % 2)
-    faces = {"north": {"uv": fu, "texture": "#blade"}, "south": {"uv": fu, "texture": "#blade"},
-             "west": {"uv": [0, 0, 4, 16], "texture": "#back"}}
+    faces = {"north": {"uv": [uw, vt, 0, vb], "texture": "#blade"}, "south": {"uv": [0, vt, uw, vb], "texture": "#blade"},
+             "west": {"uv": [0, vt, 3, vb], "texture": "#blade"}}
     if i == SEG_TIP - 1:
-        faces["up"] = {"uv": [0, 0, 4, 2], "texture": "#back"}
+        faces["up"] = {"uv": [0, 0, 3, 1], "texture": "#blade"}
     elements.append(rbox(8 + x0c, y0c, b_, top, (s1 - s0) * 1.004, 7.74 - dz, 8.26 + dz, ang, faces, light=6))
 # helle Schneide entlang der runden Spitze: kurze Stücke, jedes von Punkt zu Punkt der Kurve
-KF = {"north": {"uv": [0, 0, 16, 16], "texture": "#edge"}, "south": {"uv": [0, 0, 16, 16], "texture": "#edge"},
-      "east": {"uv": [12, 0, 16, 16], "texture": "#edge"}, "up": {"uv": [12, 0, 16, 2], "texture": "#edge"},
-      "down": {"uv": [12, 0, 16, 2], "texture": "#edge"}}
 kp = np.linspace(YOKOTE, 1.0, 6) * L_BLADE
 for j in range(len(kp) - 1):
+    vt, vb = r(16 - 16 * kp[j + 1] / L_BLADE), r(16 - 16 * kp[j] / L_BLADE)
+    KF = {"north": {"uv": [16, vt, 0, vb], "texture": "#edge"}, "south": {"uv": [0, vt, 16, vb], "texture": "#edge"},
+          "east": {"uv": [12, vt, 16, vb], "texture": "#edge"}, "up": {"uv": [12, vt, 16, vb], "texture": "#edge"},
+          "down": {"uv": [12, vt, 16, vb], "texture": "#edge"}}
     xa, ya, anga = arc(kp[j])
     xb2, yb2, angb = arc(kp[j + 1])
     ea, eb = edge_at(ya), edge_at(yb2)
@@ -317,10 +332,29 @@ elements.append(box(7.1, 8.9, -2.5, 2.45, 7.35, 8.65, GF))                     #
 elements.append(box(6.98, 9.02, -3.0, -2.5, 7.25, 8.75, dict(MF, **{"down": {"uv": [4, 4, 12, 12], "texture": "#metal"}})))  # Kashira
 
 # ------------------------------------------------------------------ Partikel-Flächen (animiert)
-# Fläche A in der Klingenebene (vom Rücken weg), Fläche B quer dazu. Jeder Pixel weiß, wo er im Modell liegt –
-# Partikel, die aus dem Slot ragen würden, werden weggelassen.
-PX0, PX1, PY0, PY1 = 8 - 6.0, 8 + 0.2, 7.5, 20.2
-PW, PHt, PF = 40, 80, 40                 # 40 Bilder à 1 Tick = 2 s, flüssig
+# Fläche A in der Klingenebene: leuchtender Schein rund um die Klinge (pulsiert mit der Energie-Welle) und
+# Partikel, die sich vom Rücken lösen. Fläche B quer dazu. Jeder Pixel weiß, wo er im Modell liegt –
+# was aus dem Slot ragen würde, wird weggelassen.
+PX0, PX1, PY0, PY1 = 8 - 6.0, 8 + 1.9, BASE_Y - 0.3, 20.2
+PW, PHt, PF = 72, 150, 2 * WF            # 32 Bilder à 1 Tick = 1,6 s, gleicher Takt wie die Energie-Welle
+
+# Schein: Abstand jedes Pixels zur Klinge
+_gx = PX0 + (np.arange(PW) + 0.5) / PW * (PX1 - PX0)
+_gy = PY1 - (np.arange(PHt) + 0.5) / PHt * (PY1 - PY0)
+GX, GY = np.meshgrid(_gx, _gy)
+_tipx, _tipy, _ = arc(L_BLADE)
+_cxy = 8 + curve(GY)
+_lo = _cxy + np.vectorize(back_at)(GY)
+_hi = _cxy + np.vectorize(edge_at)(GY)
+DIST = np.maximum(0, np.maximum(_lo - GX, GX - _hi))
+DIST = np.where(GY > _tipy, np.hypot(GX - (8 + _tipx + back_at(_tipy)), GY - _tipy), DIST)
+INSIDE = (DIST <= 0) & (GY >= BASE_Y) & (GY <= _tipy)
+GPOS = np.clip((GY - BASE_Y) / (_tipy - BASE_Y), 0, 1)
+_sx, _sy = np.vectorize(to_screen)(GX, GY)
+IN_SLOT = (_sx > 0.4) & (_sx < 15.6) & (_sy > 0.4) & (_sy < 15.6)
+HALO = 0.62 * np.exp(-DIST / 0.42) * smooth(BASE_Y, BASE_Y + 1.2, GY) * ~INSIDE * IN_SLOT
+HALO_COL = hexc("#ff5fd6")[None, None, :] * np.exp(-DIST / 0.5)[..., None] + \
+    hexc("#9b5cff")[None, None, :] * (1 - np.exp(-DIST / 0.5))[..., None]
 
 
 def particle_frames(seed, side):
@@ -329,12 +363,16 @@ def particle_frames(seed, side):
     t0 = 0.3 + 0.7 * rr.random(n) ** 0.6                 # wo am Rücken (0 Wurzel … 1 Spitze)
     ph = rr.random(n)
     spd = 0.35 + 0.9 * rr.random(n) ** 1.5               # viele bleiben nah am Rücken
-    size = rr.choice([1, 1, 2], n)
+    size = rr.choice([1, 1, 2], n) * (1 if side else 2)   # Fläche A hat feinere Pixel
     hue = rr.random(n)
     frames, alphas = [], []
     for f in range(PF):
         c = np.zeros((PHt, PW, 3))
         a = np.zeros((PHt, PW))
+        if not side:
+            surge = 0.7 + 0.65 * np.minimum(wave(GPOS, f / PF * WF), 1.2)
+            a = np.clip(HALO * surge, 0, 0.8)
+            c = HALO_COL * (0.85 + 0.3 * np.minimum(wave(GPOS, f / PF * WF), 1))[..., None]
         for i in range(n):
             age = (f / PF + ph[i]) % 1.0
             if age > 0.88:
@@ -358,7 +396,7 @@ def particle_frames(seed, side):
             colr = (hexc("#ffffff") * (1 - hue[i]) + hexc("#ff6fd2") * hue[i]) if age < 0.25 else \
                 (hexc("#c062ff") * (1 - hue[i]) + hexc("#ff3fb8") * hue[i])
             colr = colr * (0.35 + 0.65 * fade) + hexc("#2a1050") * (1 - fade) * 0.4
-            sz = max(1, size[i] - int(age * 3))                # zerfallen beim Wegtreiben
+            sz = max(1, size[i] - int(age * 3 * (1 if side else 2)))   # zerfallen beim Wegtreiben
             for dy in range(sz):
                 for dx in range(sz):
                     X, Y = px + dx, py + dy
@@ -374,8 +412,10 @@ pa, aa = particle_frames(5, False)
 save("dust", pa, aa, frame_h=PHt, frametime=1, interpolate=False)
 pb, ab = particle_frames(9, True)
 save("dust_side", pb, ab, frame_h=PHt, frametime=1, interpolate=False)
-DF = {"uv": [0, 0, 16, 16], "texture": "#dust"}
-elements.append(box(PX0, PX1, PY0, PY1, 8.0, 8.0, {"north": dict(DF), "south": dict(DF)}, light=14, shade=False))
+# Rückseite mit gespiegelten u-Werten, damit Schein und Partikel von beiden Seiten an derselben Stelle liegen
+elements.append(box(PX0, PX1, PY0, PY1, 8.0, 8.0, {"north": {"uv": [16, 0, 0, 16], "texture": "#dust"},
+                                                    "south": {"uv": [0, 0, 16, 16], "texture": "#dust"}},
+                    light=15, shade=False))
 xm = 8 + curve(14)                               # Mitte der Klinge: liegt in keiner Außenfläche
 DS = {"uv": [0, 0, 16, 16], "texture": "#dust_side"}
 elements.append(box(xm, xm, PY0, PY1, 8 - 2.35, 8 + 2.35, {"east": dict(DS), "west": dict(DS)}, light=14, shade=False))
@@ -408,7 +448,7 @@ elements = [mirror(e) for e in elements]
 
 model = {
     "gui_light": "front",
-    "textures": {"particle": T + "blade", "blade": T + "blade", "edge": T + "edge", "back": T + "back",
+    "textures": {"particle": T + "blade", "blade": T + "blade", "edge": T + "edge",
                  "grip": T + "grip", "metal": T + "metal", "collar": T + "collar",
                  "dust": T + "dust", "dust_side": T + "dust_side"},
     "elements": elements,
