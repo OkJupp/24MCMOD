@@ -9,6 +9,7 @@ import net.fabricmc.fabric.api.resource.v1.pack.PackActivationType;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelExtractionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.client.renderer.state.level.LevelRenderState;
 import net.minecraft.network.chat.Component;
@@ -39,6 +40,10 @@ public class NuitChainsClient implements ClientModInitializer {
         NuitApi.registerSkyboxType(id("lightning"), 1, LightningSkybox.CODEC);
         // JSON: "type": "nuit_chains:stars"
         NuitApi.registerSkyboxType(id("stars"), 1, StarsSkybox.CODEC);
+        // JSON: "type": "nuit_chains:atmosphere" (Tag-Himmel, Morgen-/Abendrot)
+        NuitApi.registerSkyboxType(id("atmosphere"), 1, AtmosphereSkybox.CODEC);
+        // JSON: "type": "nuit_chains:fog" (treibende Nebelbänke, in die die Ketten eintauchen)
+        NuitApi.registerSkyboxType(id("fog"), 1, FogSkybox.CODEC);
 
         // Vanilla-Wolken ausblenden, solange eine Ketten-Skybox aktiv ist ("hideClouds")
         // (gilt auch für die eigenen LOD-Wolken von Distant Horizons, falls installiert)
@@ -61,6 +66,7 @@ public class NuitChainsClient implements ClientModInitializer {
             try {
                 LevelRenderState state = context.levelState();
                 CameraRenderState camera = state.cameraRenderState;
+                DayCycle.update(Minecraft.getInstance().gameRenderer.mainCamera(), state.worldPartialTicks);
                 double timeSec = (state.gameTime + (double) state.worldPartialTicks) / 20.0;
                 for (Skybox skybox : NuitApi.getInstance().getActiveSkyboxes()) {
                     if (skybox instanceof ChainSkybox chains) {
@@ -80,6 +86,6 @@ public class NuitChainsClient implements ClientModInitializer {
                 ResourceLoader.registerBuiltinPack(id("pink_hud"), container,
                         Component.literal("Pinkes HUD (Nuit Chains)"), PackActivationType.DEFAULT_ENABLED));
 
-        LOGGER.info("Nuit Chains geladen – Skybox-Typ nuit_chains:chains registriert");
+        LOGGER.info("Nuit Chains geladen – Skybox-Typen chains, lightning, stars, atmosphere, fog registriert");
     }
 }

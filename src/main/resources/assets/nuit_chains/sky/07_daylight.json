@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "type": "nuit_chains:atmosphere",
+  "atmosphere": {
+    "dayOpacity": 0.9,
+    "twilight": 1.0,
+    "sunGlow": 1.0,
+    "nightGlow": 0.35
+  },
+  "properties": {
+    "layer": 7,
+    "fog": {
+      "modifyColors": true,
+      "red": 0.93,
+      "green": 0.78,
+      "blue": 0.9
+    }
+  },
+  "conditions": {
+    "skyboxes": {
+      "entries": [
+        "minecraft:overworld"
+      ]
+    }
+  }
+}

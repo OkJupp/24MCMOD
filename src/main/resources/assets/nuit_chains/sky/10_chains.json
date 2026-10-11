@@ -13,15 +13,15 @@
     "spacing": 180,
     "chance": 0.48,
     "cellRadius": 5,
-    "topY": 450,
-    "minLength": 120,
-    "maxLength": 220,
+    "topY": 500,
+    "minLength": 160,
+    "maxLength": 260,
     "linkLength": 18.0,
     "linkWidth": 11.5,
     "thickness": 1.85,
     "lean": 12,
     "spikes": 1,
-    "topFade": 150,
+    "topFade": 230,
     "swingDegrees": 1.6,
     "swingSpeed": 1.0,
     "wave": 0.75,
@@ -46,7 +46,7 @@
     "giantChance": 0.1,
     "giantSize": 2.2,
     "topYVariation": 90,
-    "minBottomY": 230,
+    "minBottomY": 240,
     "fadeVariation": 0.8,
     "fadeOffset": 70
   },
@@ -71,7 +71,7 @@
     "sparks": 7
   },
   "properties": {
-    "layer": 8
+    "layer": 10
   },
   "conditions": {
     "skyboxes": {

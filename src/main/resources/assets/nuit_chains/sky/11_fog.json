@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "type": "nuit_chains:fog",
+  "fog": {
+    "height": 280,
+    "thickness": 70,
+    "heightVariation": 50,
+    "coverage": 0.55,
+    "scale": 380,
+    "drift": 3.0,
+    "morph": 1.0,
+    "opacity": 0.95,
+    "density": 0.8,
+    "puffSize": 1.0,
+    "range": 1100,
+    "clearRadius": 480,
+    "haze": 0.25,
+    "lightningGlow": 1.0,
+    "seed": 99
+  },
+  "properties": {
+    "layer": 11
+  },
+  "conditions": {
+    "skyboxes": {
+      "entries": [
+        "minecraft:overworld"
+      ]
+    }
+  }
+}

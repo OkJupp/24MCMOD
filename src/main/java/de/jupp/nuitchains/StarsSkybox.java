@@ -54,7 +54,9 @@ public class StarsSkybox extends AbstractSkybox implements SkyboxTextureProvider
 
     @Override
     public void render(SkyboxRenderContext context) {
-        if (this.alpha <= 0.0F) {
+        DayCycle.update(context.camera(), context.tickDelta());
+        float visible = DayCycle.starVisibility();
+        if (this.alpha <= 0.0F || visible <= 0.002F) {
             return;
         }
         Entity entity = context.camera().entity();
@@ -78,7 +80,7 @@ public class StarsSkybox extends AbstractSkybox implements SkyboxTextureProvider
                 return;
             }
             Vector4f color = new Vector4f(this.tint.getRed(), this.tint.getGreen(), this.tint.getBlue(),
-                    this.tint.getAlpha() * this.alpha);
+                    this.tint.getAlpha() * this.alpha * visible);
             GpuBufferSlice transforms = NuitRenderBackend.createDynamicTransforms(modelView, color);
             NuitRenderBackend.drawTextured(pipeline, mesh, transforms, NuitRenderBackend.SAMPLER0_NAME, this.texture);
         }

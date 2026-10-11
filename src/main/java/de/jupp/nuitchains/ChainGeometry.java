@@ -231,7 +231,11 @@ public final class ChainGeometry {
         double topRelY;   // Aufhängehöhe relativ zur Kamera (für weiches Ausblenden pro Ecke)
         double fadeLen;   // Länge des Ausblendens
         float shardAlpha = 1F;
+        double fogA = 1, fogB = 1; // Sichtbarkeit im Nebel am oberen / unteren Ende des Glieds
     }
+
+    /** Höchstens dieser Anteil einer Kette wird zum Ausblenden nach oben benutzt. */
+    static final double MAX_FADE_SHARE = 0.7;
 
     /** Weiches Ausblenden nach oben: 0 an der Aufhängung, 1 nach {@code fadeLen} Blöcken – sehr sanfter Start. */
     static float topAlpha(double drop, double fadeLen) {
@@ -257,10 +261,10 @@ public final class ChainGeometry {
     public int build(Chain c, double ex, double ey, double ez, double timeSec,
                      QuadSink farSink, QuadSink nearSink, QuadSink glowSink, double splitDistance) {
         double split2 = splitDistance * splitDistance;
-        // Ausblenden nie länger als 40 % der Kette – sonst wird die Kette nirgends richtig sichtbar
+        // Ausblenden nie länger als 70 % der Kette – sonst wird die Kette nirgends richtig sichtbar
         // Jede Kette blendet anders ein: unterschiedlich lang und unterschiedlich tief beginnend
         double fadeMul = 1 + var.fadeVariation() * (rnd(c.hash(), 60) - 0.5);
-        double topFade = Math.max(0.01, Math.min(s.topFade() * Math.sqrt(c.scale()) * fadeMul, c.length() * 0.4));
+        double topFade = Math.max(0.01, Math.min(s.topFade() * Math.sqrt(c.scale()) * fadeMul, c.length() * MAX_FADE_SHARE));
         double fadeStart = Math.pow(rnd(c.hash(), 61), 0.8) * Math.min(var.fadeOffset(), c.length() * 0.2);
         double scale = c.scale();
         double pitch = pitch() * scale;
@@ -287,6 +291,12 @@ public final class ChainGeometry {
         double wdx = Math.cos(waveDir), wdz = Math.sin(waveDir);
         // unsichtbarer oberer Teil wird wie eine tiefere Aufhängung behandelt
         double topRelY = c.ay() - ey - fadeStart;
+        // Nebel: Sichtbarkeit an jedem Gelenk (Kette taucht dort ein, wo die Nebelbänke sind)
+        FogField fog = FogField.current();
+        double fogStrength = fog != null ? FogField.currentStrength() : 0;
+        if (fogStrength <= 0.001) fog = null;
+        if (this.fogJ.length < c.links() + 2) this.fogJ = new double[c.links() * 2 + 2];
+        this.fogJ[0] = fog == null ? 1 : fog.visibility(c.ax(), c.ay(), c.az(), timeSec, ex, ez, fogStrength);
         if (this.glowX.length < c.links() + 1) {
             this.glowX = new double[c.links() * 2 + 2]; this.glowY = new double[c.links() * 2 + 2];
             this.glowZ = new double[c.links() * 2 + 2]; this.glowA = new double[c.links() * 2 + 2];
@@ -349,6 +359,9 @@ public final class ChainGeometry {
             p.cz = pz + uz * pitch * 0.5 - ez;
             px += ux * pitch; py += uy * pitch; pz += uz * pitch;
             this.glowX[i + 1] = px - ex; this.glowY[i + 1] = py - ey; this.glowZ[i + 1] = pz - ez;
+            this.fogJ[i + 1] = fog == null ? 1 : fog.visibility(px, py, pz, timeSec, ex, ez, fogStrength);
+            p.fogA = this.fogJ[i];
+            p.fogB = this.fogJ[i + 1];
 
             double tw = c.twist() + (i & 1) * Math.PI * 0.5 + (rnd(c.hash(), 100 + i) - 0.5) * 0.12 + torsionNow * f;
             double rx = Math.cos(tw), rz = Math.sin(tw);
@@ -401,16 +414,16 @@ public final class ChainGeometry {
             p.topRelY = topRelY;
             p.fadeLen = topFade;
             p.shardAlpha = 1F;
-            p.alpha = topAlpha(topRelY - (p.cy - pitch), topFade);   // Unterkante des Glieds
+            p.alpha = topAlpha(topRelY - (p.cy - pitch), topFade) * (float) Math.max(p.fogA, p.fogB);   // Unterkante des Glieds
             // Leuchten: zum Ende hin weich auslaufen (bei zerfallenden Ketten schon vor den zerfallenen Gliedern),
             // beschädigte Glieder glühen etwas stärker
             double endFade = c.broken()
                     ? 1 - smooth(nLinks - c.brokenLinks() - 1.5, nLinks - c.brokenLinks() * 0.4, i + 1)
                     : 1 - smooth(nLinks - 2.5, nLinks, i + 1);
             float jointAlpha = topAlpha(topRelY - (py - ey), topFade);
-            this.glowA[i + 1] = jointAlpha * endFade * (1 + 0.9 * Math.min(1, damage * 1.5));
+            this.glowA[i + 1] = jointAlpha * endFade * (1 + 0.9 * Math.min(1, damage * 1.5)) * this.fogJ[i + 1];
             // Energie-Stöße und Bögen lassen das Leuchten aufflammen
-            this.glowB[i + 1] = jointAlpha * endFade * (1.15 * Math.min(1.5, p.flow) + 2.2 * p.flare);
+            this.glowB[i + 1] = jointAlpha * endFade * (1.15 * Math.min(1.5, p.flow) + 2.2 * p.flare) * this.fogJ[i + 1];
         }
 
         // Kristall-Splitter unter einem zerfallenden Ende
@@ -449,6 +462,11 @@ public final class ChainGeometry {
                 p.topRelY = topRelY;
                 p.fadeLen = topFade;
                 p.shardAlpha = (float) (smooth(0, 0.08, age) * smooth(0, 0.25, 1 - age));
+                if (fog != null) {
+                    p.shardAlpha *= (float) fog.visibility(p.cx + ex, p.cy + ey, p.cz + ez, timeSec, ex, ez, fogStrength);
+                }
+                p.fogA = 1;
+                p.fogB = 1;
             }
         }
 
@@ -466,14 +484,17 @@ public final class ChainGeometry {
         for (int q = nParts - 1; q >= 0; q--) {
             Part p = this.parts.get((int) (this.partOrder[q] & 0xFFFFFFFFL));
             double d2 = p.cx * p.cx + p.cy * p.cy + p.cz * p.cz;
-            if (p.alpha <= 0.004F) continue;
+            if (p.alpha <= (p.shard ? 0.004F : 0.02F)) continue;   // fast unsichtbare Glieder weglassen
             QuadSink sink = d2 < split2 ? nearSink : farSink;
             if (p.shard) {
                 count += emitShard(p, sink);
             } else {
                 double ld2 = d2 / (p.scale * p.scale);           // große Glieder behalten Details länger
-                LinkMesh mesh = ld2 < 240 * 240 ? (p.damage > 0.001 ? this.meshDamaged : this.meshNear)
-                        : ld2 < 520 * 520 ? this.meshMid : ld2 < 780 * 780 ? this.meshFar : this.meshTiny;
+                int lod = ld2 < 240 * 240 ? 0 : ld2 < 520 * 520 ? 1 : ld2 < 780 * 780 ? 2 : 3;
+                // kaum sichtbare Glieder (oben ausgeblendet, im Nebel): gröber
+                if (p.alpha < 0.3F) lod = Math.min(3, lod + (p.alpha < 0.12F ? 2 : 1));
+                LinkMesh mesh = lod == 0 ? (p.damage > 0.001 ? this.meshDamaged : this.meshNear)
+                        : lod == 1 ? this.meshMid : lod == 2 ? this.meshFar : this.meshTiny;
                 count += mesh.emit(p, sink);
             }
         }
@@ -487,6 +508,7 @@ public final class ChainGeometry {
 
     private double[] glowX = new double[64], glowY = new double[64], glowZ = new double[64], glowA = new double[64];
     private double[] glowB = new double[64];   // zusätzliches Aufflammen (Energie-Stöße, Bögen)
+    private double[] fogJ = new double[64];    // Sichtbarkeit im Nebel an jedem Gelenk
     private final float[] gxyz = new float[12];
     private final float[] guv = new float[8];
     private final float[] galpha = new float[4];
@@ -1097,6 +1119,8 @@ public final class ChainGeometry {
             double cph = Math.cos(p.veinPhase), sph = Math.sin(p.veinPhase);
             // ganz unterhalb des Ausblend-Bereichs: Deckkraft überall 1 (spart die teure Rechnung pro Ecke)
             boolean fullyVisible = p.topRelY - (p.cy + this.boundR * sc) >= p.fadeLen;
+            boolean fogged = p.fogA < 0.999 || p.fogB < 0.999;
+            double invHalf = 0.5 / Math.max(1e-6, this.halfLen);
             // weit weg: Blickrichtung zur Gliedmitte reicht für die Schattierung
             double cd2 = p.cx * p.cx + p.cy * p.cy + p.cz * p.cz;
             boolean farShade = cd2 > (this.boundR * sc * 12) * (this.boundR * sc * 12);
@@ -1143,7 +1167,13 @@ public final class ChainGeometry {
                 glow = Math.max(glow, baseGlow);
                 vU[idx] = (float) (0.02 + 0.96 * Math.min(1, glow) * p.pulse);
                 vx[idx] = (float) x; vy[idx] = (float) y; vz[idx] = (float) z;
-                vA[idx] = fullyVisible ? 1F : topAlpha(p.topRelY - y, p.fadeLen);
+                float va = fullyVisible ? 1F : topAlpha(p.topRelY - y, p.fadeLen);
+                if (fogged) {
+                    // Nebel zwischen oberem und unterem Gelenk überblenden (u zeigt nach unten)
+                    double ft = Math.min(1, Math.max(0, pu[idx] * invHalf + 0.5));
+                    va *= (float) (p.fogA + (p.fogB - p.fogA) * ft);
+                }
+                vA[idx] = va;
             }
 
             int visible = 0;

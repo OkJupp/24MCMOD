@@ -126,6 +126,11 @@ public final class PinkHud {
         return (a << 24) | (rgb & 0xFFFFFF);
     }
 
+    /** Ist das eingebaute Paket "Pinkes HUD (Nuit Chains)" gerade aktiv? (auch für das pinke Totem) */
+    public static boolean isActive() {
+        return enabled();
+    }
+
     private static boolean enabled() {
         try {
             return Minecraft.getInstance().getResourceManager().getResource(MARKER).isPresent();

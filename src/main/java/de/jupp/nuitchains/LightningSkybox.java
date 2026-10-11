@@ -133,7 +133,7 @@ public class LightningSkybox extends AbstractSkybox implements SkyboxTextureProv
                 return;
             }
             Vector4f mod = new Vector4f(this.color.getRed(), this.color.getGreen(), this.color.getBlue(),
-                    Math.min(1F, this.color.getAlpha() * this.alpha * intensity));
+                    Math.min(1F, this.color.getAlpha() * this.alpha * intensity * (float) (1 - 0.4 * DayCycle.day())));
             GpuBufferSlice transforms = NuitRenderBackend.createDynamicTransforms(modelView, mod);
             NuitRenderBackend.drawTextured(pipeline, mesh, transforms, NuitRenderBackend.SAMPLER0_NAME, this.texture);
         }

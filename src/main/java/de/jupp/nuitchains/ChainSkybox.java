@@ -241,10 +241,11 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
         this.farPrepared = false;
 
         context.applyFog();
+        DayCycle.update(context.camera(), context.tickDelta());
         Matrix4f modelView = new Matrix4f(context.skyModelViewStack());
-        // Ketten leuchten kurz mit auf, wenn es blitzt
+        // Ketten leuchten kurz mit auf, wenn es blitzt; tagsüber leuchten sie schwächer
         float flash = LightningSkybox.currentFlash;
-        float glowMul = 1F + 1.8F * flash;
+        float glowMul = (1F + 1.8F * flash) * DayCycle.chainGlow();
 
         for (FarChain chain : this.drawList) {
             // Kamera hat sich seit dem Bauen bewegt: verschieben (zwischengespeicherte ferne Ketten)

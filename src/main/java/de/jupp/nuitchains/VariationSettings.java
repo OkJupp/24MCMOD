@@ -19,7 +19,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 public record VariationSettings(float sizeMin, float sizeMax, float giantChance, float giantSize, float topYVariation, float minBottomY,
                                 float fadeVariation, float fadeOffset) {
 
-    public static final VariationSettings DEFAULT = new VariationSettings(0.9F, 1.5F, 0.1F, 2.2F, 90F, 230F, 0.8F, 70F);
+    public static final VariationSettings DEFAULT = new VariationSettings(0.9F, 1.5F, 0.1F, 2.2F, 90F, 240F, 0.8F, 70F);
 
     public static final Codec<VariationSettings> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.floatRange(0.1F, 10F).optionalFieldOf("sizeMin", DEFAULT.sizeMin()).forGetter(VariationSettings::sizeMin),
