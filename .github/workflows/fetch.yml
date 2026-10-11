@@ -1,0 +1,36 @@
+name: Datei holen
+
+# Hilfs-Workflow: lädt eine Datei aus dem Internet (z. B. ein Ressourcenpaket als Vorlage)
+# und hängt sie an das Release "werkzeug-downloads". Wird nur von Hand gestartet.
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Download-URL"
+        required: true
+      name:
+        description: "Dateiname"
+        required: true
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Herunterladen
+        env:
+          URL: ${{ inputs.url }}
+          NAME: ${{ inputs.name }}
+        run: |
+          case "$NAME" in */*|..*) echo "ungültiger Name"; exit 1;; esac
+          curl -fsSL -o "$NAME" "$URL"
+          ls -la "$NAME"
+      - name: An Release hängen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: werkzeug-downloads
+          name: Hilfs-Downloads (Vorlagen)
+          prerelease: true
+          make_latest: false
+          files: ${{ inputs.name }}
