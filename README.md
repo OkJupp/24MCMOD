@@ -101,7 +101,7 @@ Weitere Schalter: `hideClouds` (Vanilla-Wolken **und** die LOD-Wolken von Distan
 
 ## Pinkes HUD
 
-Hotbar, Auswahl-Rahmen, Nebenhand, Herzen, Rüstung, Essen und XP-Leiste sind pink. Auf der Hotbar läuft Energie um die Slot-Rahmen, die Rahmen flackern, Funken knistern, der ausgewählte Slot pulsiert, die Level-Zahl pulsiert pink. Die Grafiken sind feste Bilder; die Bewegung zeichnet der Mod per Code (`PinkHud`) – animierte GUI-Grafiken per `.mcmeta` werden in 26.3 nicht zuverlässig geladen.
+Hotbar, Auswahl-Rahmen, Nebenhand, Herzen, Rüstung, Essen und XP-Leiste sind pink. Auf der Hotbar läuft Energie um die Slot-Rahmen, die Rahmen flackern, Funken knistern, der ausgewählte Slot pulsiert, die Level-Zahl pulsiert pink. Die Grafiken sind feste Bilder; die Bewegung zeichnet der Mod per Code (`PinkHud`). Die Hotbar selbst wird als eigenes Bild gezeichnet (`assets/nuit_chains/textures/gui/pink_hotbar.png` im Paket), nicht aus dem GUI-Atlas – dort kam sie bei manchen Setups als lila-schwarze Platzhalter-Textur an.
 
 Das HUD ist ein eingebautes Ressourcenpaket **„Pinkes HUD (Nuit Chains)“** – standardmäßig an, unter *Optionen → Ressourcenpakete* abschaltbar. Die Grafiken erzeugt `tools/gen_hud.py` (Farben und Animation stehen oben im Skript).
 

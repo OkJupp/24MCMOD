@@ -27,6 +27,8 @@ public final class PinkHud {
     private static final Identifier SLOT_GLOW = NuitChainsClient.id("hud_fx/slot_glow");
     private static final Identifier SELECTION_GLOW = NuitChainsClient.id("hud_fx/selection_glow");
     private static final long START = System.nanoTime();
+    /** Hotbar als eigenständiges Bild (nicht im GUI-Atlas). */
+    private static final Identifier HOTBAR_TEXTURE = NuitChainsClient.id("textures/gui/pink_hotbar.png");
 
     private PinkHud() {
     }
@@ -35,8 +37,19 @@ public final class PinkHud {
         return (System.nanoTime() - START) / 1.0e9;
     }
 
+    /** Ersetzt das Zeichnen des Hotbar-Hintergrunds; ohne aktives Paket bleibt alles wie in Vanilla. */
+    public static void drawHotbar(GuiGraphicsExtractor g, com.mojang.renderpearl.api.pipeline.RenderPipeline pipeline,
+                                  Identifier sprite, int x, int y, int width, int height) {
+        if (!enabled()) {
+            g.blitSprite(pipeline, sprite, x, y, width, height);
+            return;
+        }
+        g.blit(pipeline, HOTBAR_TEXTURE, x, y, 0F, 0F, width, height, width, height);
+        drawHotbarFx(g);
+    }
+
     /**
-     * Bewegung auf der Hotbar (gezeichnet nach Hotbar und Auswahl-Rahmen, vor den Items):
+     * Bewegung auf der Hotbar (gezeichnet direkt nach dem Hotbar-Hintergrund, vor Auswahl-Rahmen und Items):
      * Energie läuft um jeden Slot, die Rahmen flackern leicht, ab und zu knistert ein Funke,
      * der ausgewählte Slot pulsiert.
      */

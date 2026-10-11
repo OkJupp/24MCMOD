@@ -1,5 +1,5 @@
 """Pinkes, animiertes HUD als GUI-Sprites (Minecraft 26.3).
-Aufruf: gen_hud.py VANILLA_HUD_DIR OUT_HUD_DIR [FX_DIR]
+Aufruf: gen_hud.py VANILLA_HUD_DIR OUT_HUD_DIR [FX_DIR] [HOTBAR_PNG]
 Alle Maße in GUI-Pixeln; Texturen in S-facher Auflösung, animiert als senkrechte Bildstreifen + .mcmeta."""
 import sys, os, json, math
 import numpy as np
@@ -371,6 +371,9 @@ def fx_sprites(fx_dir):
 if len(sys.argv) > 3:
     fx_sprites(sys.argv[3])
 hotbar()
+# Die Hotbar wird nicht aus dem GUI-Atlas gezeichnet, sondern als eigenes Bild (siehe PinkHud.drawHotbar)
+if len(sys.argv) > 4:
+    os.replace(os.path.join(OUT, "hotbar.png"), sys.argv[4])
 selection()
 offhand("left")
 offhand("right")
