@@ -250,7 +250,10 @@ public final class ChainGeometry {
                      QuadSink farSink, QuadSink nearSink, QuadSink glowSink, double splitDistance) {
         double split2 = splitDistance * splitDistance;
         // Ausblenden nie länger als 40 % der Kette – sonst wird die Kette nirgends richtig sichtbar
-        double topFade = Math.max(0.01, Math.min(s.topFade() * Math.sqrt(c.scale()), c.length() * 0.4));
+        // Jede Kette blendet anders ein: unterschiedlich lang und unterschiedlich tief beginnend
+        double fadeMul = 1 + var.fadeVariation() * (rnd(c.hash(), 60) - 0.5);
+        double topFade = Math.max(0.01, Math.min(s.topFade() * Math.sqrt(c.scale()) * fadeMul, c.length() * 0.4));
+        double fadeStart = Math.pow(rnd(c.hash(), 61), 0.8) * Math.min(var.fadeOffset(), c.length() * 0.2);
         double scale = c.scale();
         double pitch = pitch() * scale;
         double swing = Math.toRadians(s.swingDegrees());
@@ -274,7 +277,8 @@ public final class ChainGeometry {
         double waveW = 2 * Math.PI / (mot.wavePeriod() * Math.sqrt(scale));
         double waveDir = c.swingAxis() + Math.PI * 0.5 + 0.7 * noise1(timeSec * 0.015, c.hash() ^ 0x77L);
         double wdx = Math.cos(waveDir), wdz = Math.sin(waveDir);
-        double topRelY = c.ay() - ey;
+        // unsichtbarer oberer Teil wird wie eine tiefere Aufhängung behandelt
+        double topRelY = c.ay() - ey - fadeStart;
         if (this.glowX.length < c.links() + 1) {
             this.glowX = new double[c.links() * 2 + 2]; this.glowY = new double[c.links() * 2 + 2];
             this.glowZ = new double[c.links() * 2 + 2]; this.glowA = new double[c.links() * 2 + 2];
@@ -285,7 +289,7 @@ public final class ChainGeometry {
         int nLinks = c.links();
         int nParts = 0;
         // Elektrische Bögen: nur an gut sichtbaren Gliedern (nicht im ausgeblendeten oberen Teil)
-        int arcMin = (int) Math.ceil(topFade * 0.6 / pitch);
+        int arcMin = (int) Math.ceil((fadeStart + topFade * 0.6) / pitch);
         int arcMax = c.broken() ? nLinks - 1 - (int) Math.ceil(c.brokenLinks() * 0.5) : nLinks - 1;
         findArcs(c, timeSec, arcMin, arcMax);
         // Energie-Stöße: wandern von der Aufhängung nach unten
@@ -360,7 +364,7 @@ public final class ChainGeometry {
                 }
             }
             // Einschläge überall entlang der Kette (nicht im ausgeblendeten oberen Teil)
-            if (damage == 0 && i * pitch > topFade * 0.5 && rnd(p.seed, 1) < dmg.wear()) {
+            if (damage == 0 && i * pitch > fadeStart + topFade * 0.5 && rnd(p.seed, 1) < dmg.wear()) {
                 damage = dmg.wearStrength() * (0.6 + 0.4 * rnd(p.seed, 2));
                 hit = true;
             }

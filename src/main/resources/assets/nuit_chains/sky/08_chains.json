@@ -46,7 +46,9 @@
     "giantChance": 0.1,
     "giantSize": 2.2,
     "topYVariation": 90,
-    "minBottomY": 230
+    "minBottomY": 230,
+    "fadeVariation": 0.8,
+    "fadeOffset": 70
   },
   "motion": {
     "windStrength": 1.5,

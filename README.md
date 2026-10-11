@@ -54,7 +54,7 @@ Unter `style`: `spikeStyle` (`"studded"` = gerade Stacheln mit Kragen, `"hooks"`
 
 Unter `damage`: `brokenChance` (Anteil zerfallender Ketten), `brokenLinks` (wie viele Glieder am Ende zerfallen), `wear` / `wearStrength` (Anteil und Größe der Einschläge entlang der ganzen Kette), `fragments` / `fragmentFall` (glühende Tropfen unter dem Ende), `veins` (leuchtende Energie-Adern auf den Gliedern, zum Ende hin stärker, 0–1, Standard 0.6).
 
-Unter `variation`: `sizeMin` / `sizeMax` (Größenbereich der Ketten), `giantChance` / `giantSize` (seltene Riesen-Ketten), `topYVariation` (wie stark die Aufhängehöhe schwankt), `minBottomY` (tiefster Punkt, bis zu dem eine Kette hängen darf – Standard 230).
+Unter `variation`: `sizeMin` / `sizeMax` (Größenbereich der Ketten), `giantChance` / `giantSize` (seltene Riesen-Ketten), `topYVariation` (wie stark die Aufhängehöhe schwankt), `minBottomY` (tiefster Punkt, bis zu dem eine Kette hängen darf – Standard 230), `fadeVariation` (wie unterschiedlich lang das Einblenden oben ist, 0–1, Standard 0.8), `fadeOffset` (bis zu so vielen Blöcken bleibt eine Kette oben zusätzlich unsichtbar, jede anders – dadurch fangen sie unterschiedlich hoch an, Standard 70).
 
 Unter `motion`: `windStrength` / `windSpeed` (gemeinsame, weiche Windböen für alle Ketten), `torsionDegrees` / `torsionSpeed` (Ketten drehen sich langsam um sich selbst), `emberPulse` (wie stark die glühenden Bruchkanten pulsieren), `waveDegrees` / `waveLength` / `wavePeriod` (Welle – Standard 11° / 11 Glieder / 4 s, die wie bei einer Peitsche von oben nach unten durch die Kette läuft: Stärke, Länge in Gliedern, Sekunden pro Welle). Alles läuft nur über die Zeit – Spieler in der Nähe verändern nichts.
 
