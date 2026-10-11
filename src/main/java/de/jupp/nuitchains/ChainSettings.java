@@ -29,14 +29,14 @@ public record ChainSettings(int spacing, float chance, int cellRadius, float top
                             float thickness, float lean, int spikes, float topFade, float swingDegrees, float swingSpeed, float wave, int seed) {
 
     public static final ChainSettings DEFAULT = new ChainSettings(
-            180, 0.62F, 2, 450F,
+            180, 0.62F, 5, 450F,
             120F, 220F, 18.0F, 11.5F,
             1.85F, 12F, 1, 150F, 1.0F, 1.0F, 0.6F, 2424);
 
     public static final Codec<ChainSettings> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.intRange(16, 4096).optionalFieldOf("spacing", DEFAULT.spacing()).forGetter(ChainSettings::spacing),
             Codec.floatRange(0F, 1F).optionalFieldOf("chance", DEFAULT.chance()).forGetter(ChainSettings::chance),
-            Codec.intRange(0, 6).optionalFieldOf("cellRadius", DEFAULT.cellRadius()).forGetter(ChainSettings::cellRadius),
+            Codec.intRange(0, 10).optionalFieldOf("cellRadius", DEFAULT.cellRadius()).forGetter(ChainSettings::cellRadius),
             Codec.FLOAT.optionalFieldOf("topY", DEFAULT.topY()).forGetter(ChainSettings::topY),
             Codec.floatRange(4F, 4000F).optionalFieldOf("minLength", DEFAULT.minLength()).forGetter(ChainSettings::minLength),
             Codec.floatRange(4F, 4000F).optionalFieldOf("maxLength", DEFAULT.maxLength()).forGetter(ChainSettings::maxLength),

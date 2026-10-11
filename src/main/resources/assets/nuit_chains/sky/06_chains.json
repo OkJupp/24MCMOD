@@ -12,7 +12,7 @@
   "chains": {
     "spacing": 180,
     "chance": 0.62,
-    "cellRadius": 2,
+    "cellRadius": 5,
     "topY": 450,
     "minLength": 120,
     "maxLength": 220,

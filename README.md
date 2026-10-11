@@ -37,7 +37,7 @@ Wichtige Werte in `06_chains.json` → `chains`:
 |---|---|---|
 | `spacing` | Abstand des Rasters in Blöcken | 180 |
 | `chance` | Anteil der Rasterfelder mit Kette (0–1) | 0.62 |
-| `cellRadius` | Wie viele Felder rundum sichtbar sind (mehr = mehr Ketten, mehr Leistung) | 2 |
+| `cellRadius` | Wie viele Felder rundum sichtbar sind: 5 ≈ 1000 Blöcke Sichtweite (bis 10 möglich; mehr = mehr Ketten, kostet etwas mehr Leistung – bei FPS-Problemen auf 3 oder 4 senken) | 5 |
 | `topY` | Aufhänge-Höhe | 450 |
 | `minLength` / `maxLength` | Kettenlänge (wird gekürzt, falls sie unter `minBottomY` reichen würde) | 120 / 220 |
 | `linkLength` / `linkWidth` / `thickness` | Größe der Glieder | 18 / 11.5 / 1.85 |

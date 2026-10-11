@@ -28,6 +28,7 @@ import org.joml.Vector4f;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -80,16 +81,26 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
     private final boolean hideClouds;
     private final ChainGeometry geometry;
 
-    /** Ferne Vierecke und Leuchten dieses Bildes, je Kette – vom Welt-Durchgang vorbereitet. */
-    private final List<FarChain> farChains = new ArrayList<>();
+    /** Ferne Vierecke und Leuchten je Kette (nach Kette zwischengespeichert), Reihenfolge dieses Bildes in {@link #drawList}. */
+    private final HashMap<Long, FarChain> farCache = new HashMap<>();
+    private final List<FarChain> drawList = new ArrayList<>();
     private boolean farPrepared;
+    private long frameNo;
+    private double eyeX, eyeY, eyeZ;
 
     /** Puffer für Vierecke (Position, UV, Deckkraft pro Ecke). */
     static final class QuadBuffer {
         float[] data = new float[FLOATS_PER_QUAD * 256];
         int quads;
 
+        double maxD2;
+
         void add(float[] xyz, float[] uv, float[] alpha) {
+            for (int v = 0; v < 4; v++) {
+                double x = xyz[v * 3], y = xyz[v * 3 + 1], z = xyz[v * 3 + 2];
+                double d2 = x * x + y * y + z * z;
+                if (d2 > this.maxD2) this.maxD2 = d2;
+            }
             int o = this.quads * FLOATS_PER_QUAD;
             if (o + FLOATS_PER_QUAD > this.data.length) this.data = Arrays.copyOf(this.data, this.data.length * 2);
             System.arraycopy(xyz, 0, this.data, o, 12);
@@ -103,6 +114,16 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
         final QuadBuffer body = new QuadBuffer();
         final QuadBuffer glow = new QuadBuffer();
         float fade;
+        double bx, by, bz;                 // Kameraposition, als die Kette zuletzt gebaut wurde
+        long builtFrame = Long.MIN_VALUE;
+        long seenFrame;
+
+        void reset(double x, double y, double z, long frame) {
+            this.body.quads = 0; this.body.maxD2 = 0;
+            this.glow.quads = 0; this.glow.maxD2 = 0;
+            this.bx = x; this.by = y; this.bz = z;
+            this.builtFrame = frame;
+        }
     }
 
     public ChainSkybox(Properties properties, Conditions conditions, Identifier texture, RGBA tint,
@@ -124,20 +145,38 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
         this.geometry = new ChainGeometry(settings, damage, variation, motion, glow, style, energy);
     }
 
-    private FarChain farChain(int index, float fade) {
-        while (this.farChains.size() <= index) this.farChains.add(new FarChain());
-        FarChain far = this.farChains.get(index);
-        far.body.quads = 0;
-        far.glow.quads = 0;
-        far.fade = fade;
-        return far;
-    }
-
-    private void clearFrom(int index) {
-        for (int i = index; i < this.farChains.size(); i++) {
-            this.farChains.get(i).body.quads = 0;
-            this.farChains.get(i).glow.quads = 0;
+    /**
+     * Baut alle Ketten dieses Bildes. Nahe Ketten werden jedes Bild neu gebaut; weit entfernte nur jedes
+     * 2. bzw. 3. Bild (versetzt, damit die Arbeit sich verteilt) – Kamerabewegung wird beim Zeichnen
+     * ausgeglichen, deshalb sieht man davon nichts.
+     */
+    private void buildFrame(List<ChainGeometry.Chain> chains, double ex, double ey, double ez, double timeSec,
+                            double split, QuadBuffer near) {
+        this.frameNo++;
+        this.eyeX = ex; this.eyeY = ey; this.eyeZ = ez;
+        this.drawList.clear();
+        for (ChainGeometry.Chain chain : chains) {
+            FarChain far = this.farCache.computeIfAbsent(chain.hash(), k -> new FarChain());
+            far.seenFrame = this.frameNo;
+            far.fade = (float) chain.fade();
+            // nahe Ketten (oder solche, die in die Welt-Geometrie reichen) jedes Bild, ferne seltener
+            boolean distant = chain.distance() - chain.length() * 0.75 - 80 > Math.max(split, this.nearDistance);
+            boolean onlyFar = near == null || distant;
+            int every = !distant ? 1 : chain.distance() > 700 ? 3 : 2;
+            double mx = far.bx - ex, my = far.by - ey, mz = far.bz - ez;
+            boolean moved = mx * mx + my * my + mz * mz > 0.0004 * chain.distance() * chain.distance();
+            if (every == 1 || far.builtFrame == Long.MIN_VALUE || moved
+                    || (this.frameNo + (chain.hash() & 0xFF)) % every == 0) {
+                far.reset(ex, ey, ez, this.frameNo);
+                if (onlyFar) {
+                    this.geometry.build(chain, ex, ey, ez, timeSec, far.body::add, far.body::add, far.glow::add, 0);
+                } else {
+                    this.geometry.build(chain, ex, ey, ez, timeSec, far.body::add, near::add, far.glow::add, split);
+                }
+            }
+            this.drawList.add(far);
         }
+        this.farCache.values().removeIf(f -> f.seenFrame != this.frameNo);
     }
 
     // ------------------------------------------------------------------ Welt-Durchgang (läuft vor dem Himmel)
@@ -155,12 +194,7 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
         List<ChainGeometry.Chain> chains = this.geometry.collect(eye.x, eye.y, eye.z);
         QuadBuffer near = this.nearBuffer;
         near.quads = 0;
-        int used = 0;
-        for (ChainGeometry.Chain chain : chains) {
-            FarChain far = farChain(used++, (float) chain.fade());
-            this.geometry.build(chain, eye.x, eye.y, eye.z, timeSec, far.body::add, near::add, far.glow::add, split);
-        }
-        clearFrom(used);
+        buildFrame(chains, eye.x, eye.y, eye.z, timeSec, split, near);
         this.farPrepared = true;
 
         if (near.quads > 0) {
@@ -202,12 +236,7 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
             Vec3 eye = entity.getEyePosition(tickDelta);
             double timeSec = (entity.level().getGameTime() + (double) tickDelta) / 20.0;
             List<ChainGeometry.Chain> chains = this.geometry.collect(eye.x, eye.y, eye.z);
-            int used = 0;
-            for (ChainGeometry.Chain chain : chains) {
-                FarChain far = farChain(used++, (float) chain.fade());
-                this.geometry.build(chain, eye.x, eye.y, eye.z, timeSec, far.body::add, far.body::add, far.glow::add, 0);
-            }
-            clearFrom(used);
+            buildFrame(chains, eye.x, eye.y, eye.z, timeSec, 0, null);
         }
         this.farPrepared = false;
 
@@ -217,27 +246,31 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
         float flash = LightningSkybox.currentFlash;
         float glowMul = 1F + 1.8F * flash;
 
-        for (FarChain chain : this.farChains) {
+        for (FarChain chain : this.drawList) {
+            // Kamera hat sich seit dem Bauen bewegt: verschieben (zwischengespeicherte ferne Ketten)
+            float ox = (float) (chain.bx - this.eyeX), oy = (float) (chain.by - this.eyeY), oz = (float) (chain.bz - this.eyeZ);
             if (chain.glow.quads > 0) {
-                draw(ChainRenderTypes.skyGlow(), GLOW_TEXTURE, modelView, chain.glow, Math.min(1F, chain.fade * glowMul));
+                draw(ChainRenderTypes.skyGlow(), GLOW_TEXTURE, modelView, chain.glow, Math.min(1F, chain.fade * glowMul), ox, oy, oz);
             }
             if (chain.body.quads > 0) {
-                draw(ChainRenderTypes.skyChains(), this.texture, modelView, chain.body, chain.fade);
+                draw(ChainRenderTypes.skyChains(), this.texture, modelView, chain.body, chain.fade, ox, oy, oz);
             }
         }
     }
 
-    private void draw(RenderPipeline pipeline, Identifier tex, Matrix4f modelView, QuadBuffer buf, float alpha) {
+    private void draw(RenderPipeline pipeline, Identifier tex, Matrix4f modelView, QuadBuffer buf, float alpha,
+                      float ox, float oy, float oz) {
         try (ByteBufferBuilder byteBufferBuilder = NuitRenderPipelines.byteBufferBuilder(pipeline, buf.quads * 4)) {
             BufferBuilder builder = NuitRenderPipelines.bufferBuilder(byteBufferBuilder, pipeline);
             float[] d = buf.data;
+            // Ganze Kette gleichmäßig in die Himmelskugel ziehen: Richtung jeder Ecke bleibt gleich
+            double maxDist = Math.sqrt(buf.maxD2) + Math.sqrt(ox * ox + oy * oy + oz * oz);
+            float sc = (float) (maxDist > SKY_RADIUS ? SKY_RADIUS / maxDist : 1.0);
             for (int q = 0; q < buf.quads; q++) {
                 int o = q * FLOATS_PER_QUAD;
                 for (int v = 0; v < 4; v++) {
-                    double x = d[o + v * 3], y = d[o + v * 3 + 1], z = d[o + v * 3 + 2];
-                    double dist = Math.sqrt(x * x + y * y + z * z);
-                    double sc = dist > SKY_RADIUS ? SKY_RADIUS / dist : 1.0; // Richtung bleibt gleich
-                    builder.addVertex((float) (x * sc), (float) (y * sc), (float) (z * sc))
+                    float x = d[o + v * 3] + ox, y = d[o + v * 3 + 1] + oy, z = d[o + v * 3 + 2] + oz;
+                    builder.addVertex(x * sc, y * sc, z * sc)
                             .setUv(d[o + 12 + v * 2], d[o + 13 + v * 2])
                             .setColor(1F, 1F, 1F, d[o + 20 + v]);
                 }

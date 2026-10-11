@@ -38,6 +38,7 @@ public final class ChainGeometry {
     private final LinkMesh meshNear;
     private final LinkMesh meshMid;
     private final LinkMesh meshFar;
+    private final LinkMesh meshTiny;
     private final LinkMesh meshDamaged;
 
     private final List<Part> parts = new ArrayList<>();
@@ -70,6 +71,7 @@ public final class ChainGeometry {
         this.meshNear = new LinkMesh(settings, style, 13, 12, 10);
         this.meshMid = new LinkMesh(settings, style, 8, 8, 6);
         this.meshFar = new LinkMesh(settings, style, 5, 6, 4);
+        this.meshTiny = new LinkMesh(settings, style, 4, 4, 3);
         this.meshDamaged = new LinkMesh(settings, style, 30, 22, 10);
     }
 
@@ -456,7 +458,7 @@ public final class ChainGeometry {
             } else {
                 double ld2 = d2 / (p.scale * p.scale);           // große Glieder behalten Details länger
                 LinkMesh mesh = ld2 < 200 * 200 ? (p.damage > 0.001 ? this.meshDamaged : this.meshNear)
-                        : ld2 < 420 * 420 ? this.meshMid : this.meshFar;
+                        : ld2 < 420 * 420 ? this.meshMid : ld2 < 650 * 650 ? this.meshFar : this.meshTiny;
                 count += mesh.emit(p, sink);
             }
         }
@@ -811,6 +813,8 @@ public final class ChainGeometry {
         final double halfLen;
         final double straight, b;
         final double noiseScale;
+        final boolean sorted;        // Vierecke nach Abstand sortieren (bei weit entfernten Gliedern unnötig)
+        double boundR;               // größter Abstand einer Ecke von der Gliedmitte
 
         private final float[] vx, vy, vz, vV, vU, vA;
         private final float[] qa = new float[4];
@@ -831,7 +835,13 @@ public final class ChainGeometry {
                 {1.52, 0.78}, {3.75, 0.0}       // Kegel
         };
 
+        /** Vereinfachte Stacheln für weit entfernte Glieder: Stiel, Kragen, Spitze. */
+        private static final double[][] STUD_LOW = {
+            {0.0, 0.55}, {1.05, 0.84}, {1.05, 0.84}, {1.42, 0.84}, {1.42, 0.78}, {3.75, 0.0}};
+
         LinkMesh(ChainSettings s, StyleSettings style, int arcSegments, int tubeSegments, int spikeSegments) {
+            final double[][] STUD = spikeSegments <= 4 ? STUD_LOW : LinkMesh.STUD;
+            this.sorted = arcSegments > 5;
             this.r = s.thickness();
             this.halfLen = Math.max(0.1, s.linkLength() * 0.5 - r);
             double b = Math.max(r * 1.15, s.linkWidth() * 0.5 - r);
@@ -980,6 +990,10 @@ public final class ChainGeometry {
             this.quads = new int[nq * 4];
             for (int q = 0; q < nq; q++) System.arraycopy(quadList.get(q), 0, this.quads, q * 4, 4);
             this.noiseScale = 1.0 / Math.max(0.05, r * 2.2);
+            for (int i = 0; i < nv; i++) {
+                this.boundR = Math.max(this.boundR, Math.sqrt(pu[i] * pu[i] + pw[i] * pw[i] + pn[i] * pn[i]));
+            }
+            this.boundR += r * 0.5;                                  // Spielraum für Verformungen
             vx = new float[nv]; vy = new float[nv]; vz = new float[nv]; vV = new float[nv]; vU = new float[nv]; vA = new float[nv];
             removed = new boolean[nq];
             order = new long[nq];
@@ -1047,6 +1061,12 @@ public final class ChainGeometry {
             double vBoost = Math.min(1, p.energy * 1.6) * (1 + 0.8 * flow + 1.2 * flare);
             double baseGlow = 0.26 * Math.min(1, flow) + 0.42 * flare;
             double cph = Math.cos(p.veinPhase), sph = Math.sin(p.veinPhase);
+            // ganz unterhalb des Ausblend-Bereichs: Deckkraft überall 1 (spart die teure Rechnung pro Ecke)
+            boolean fullyVisible = p.topRelY - (p.cy + this.boundR * sc) >= p.fadeLen;
+            // weit weg: Blickrichtung zur Gliedmitte reicht für die Schattierung
+            double cd2 = p.cx * p.cx + p.cy * p.cy + p.cz * p.cz;
+            boolean farShade = cd2 > (this.boundR * sc * 12) * (this.boundR * sc * 12);
+            double invCenter = 1.0 / Math.sqrt(Math.max(1e-9, cd2));
 
             for (int idx = 0; idx < nv; idx++) {
                 double lu = pu[idx], lw = pw[idx], ln = pn[idx];
@@ -1062,8 +1082,8 @@ public final class ChainGeometry {
                 double gx = nu[idx] * p.ux + nw[idx] * p.wx + nn[idx] * p.nx;
                 double gy = nu[idx] * p.uy + nw[idx] * p.wy + nn[idx] * p.ny;
                 double gz = nu[idx] * p.uz + nw[idx] * p.wz + nn[idx] * p.nz;
-                double dist = Math.sqrt(x * x + y * y + z * z);
-                double ndv = -(gx * x + gy * y + gz * z) / dist;
+                double inv = farShade ? invCenter : 1.0 / Math.sqrt(x * x + y * y + z * z);
+                double ndv = -(gx * x + gy * y + gz * z) * inv;
                 vV[idx] = (float) (1.0 - shade(gy, ndv));
                 double glow = 0;
                 if (damaged) {
@@ -1072,14 +1092,15 @@ public final class ChainGeometry {
                 }
                 if (veins != null) {
                     double vv = 0.5 + (veins[idx] - 0.5) * cph + (veins[nv + idx] - 0.5) * sph;
-                    double edge = Math.exp(-((vv - vThr) / 0.022) * ((vv - vThr) / 0.022));   // helle Ränder
+                    double dv = (vv - vThr) / 0.022;
+                    double edge = dv > -3.2 && dv < 3.2 ? Math.exp(-dv * dv) : 0;              // helle Ränder
                     double fill = smooth(vThr, vThr + 0.06, vv) * 0.28;                       // leicht glühende Fläche
                     glow = Math.max(glow, (edge * 0.95 + fill) * vBoost);
                 }
                 glow = Math.max(glow, baseGlow);
                 vU[idx] = (float) (0.02 + 0.96 * Math.min(1, glow) * p.pulse);
                 vx[idx] = (float) x; vy[idx] = (float) y; vz[idx] = (float) z;
-                vA[idx] = topAlpha(p.topRelY - y, p.fadeLen);
+                vA[idx] = fullyVisible ? 1F : topAlpha(p.topRelY - y, p.fadeLen);
             }
 
             int visible = 0;
@@ -1101,7 +1122,7 @@ public final class ChainGeometry {
                 float dist2 = (float) (x * x + y * y + z * z);
                 order[visible++] = ((long) Float.floatToIntBits(dist2) << 32) | q;
             }
-            Arrays.sort(order, 0, visible);
+            if (this.sorted) Arrays.sort(order, 0, visible);
             for (int o = visible - 1; o >= 0; o--) {
                 int q = (int) (order[o] & 0xFFFFFFFFL);
                 boolean inside = removed[q];
