@@ -78,7 +78,8 @@ BACK, EDGE0 = -0.85, 0.9            # Rücken / Schneide relativ zur Mittellinie
 BEND = 11.0                          # Krümmung: so viele Grad dreht die Klinge bis zur Spitze zum Rücken hin
 EDGE_STRIP = 0.36                    # Breite der hellen Schneide
 K = 0.84                             # Gesamtgröße (passt so diagonal in den Slot, mit etwas Rand)
-SEG_MAIN, SEG_TIP = 12, 6           # Abschnitte der Klinge / der schrägen Spitze
+SEG_MAIN, SEG_TIP = 12, 8           # Abschnitte der Klinge / der schrägen Spitze
+YOKOTE = 0.87                        # ab hier (Anteil der Klingenlänge) beginnt die schräge Spitze
 L_BLADE = TIP_Y - BASE_Y
 
 # Mittellinie als Bogen: der Winkel wächst gleichmäßig -> runde Krümmung ohne Stufen
@@ -101,9 +102,11 @@ def curve(y):
 def edge_at(y):
     """Abstand der Schneide von der Mittellinie: verjüngt sich, an der Spitze (Kissaki) läuft sie zum Rücken."""
     t = (y - BASE_Y) / (TIP_Y - BASE_Y)
-    e = EDGE0 - 0.25 * t
-    kis = smooth(0.86, 1.0, t)
-    return e * (1 - kis) + (BACK + 0.08) * kis
+    if t <= YOKOTE:
+        return EDGE0 - 0.25 * t
+    ek, bt = EDGE0 - 0.25 * YOKOTE, BACK + 0.12
+    u = (t - YOKOTE) / (1 - YOKOTE)
+    return ek + (bt - ek) * u ** 1.7                 # Fukura: erst flach, dann zur Spitze hin rund einziehend
 
 
 def back_at(y):
@@ -193,12 +196,6 @@ col[:, -1] = hexc("#8a5a7c")
 col[3] = hexc("#b07aa2")
 save("collar", col)
 
-# Würfel-Splitter 8 x 8: leuchtende Galaxie-Pixel
-col = np.zeros((8, 8, 3)) + hexc("#7a2dff")
-col[1:7, 1:7] = hexc("#c043ff")
-col[2:6, 2:6] = hexc("#ff7ad6")
-col[3:5, 3:5] = hexc("#ffffff")
-save("shard", col)
 
 # ------------------------------------------------------------------ Modell-Hilfen
 ROT = {"origin": [8, 8, 8], "axis": "z", "angle": -45}
@@ -249,35 +246,63 @@ def rbox(px, py, x0, x1, length, z0, z1, ang, faces, light=0, shade=True):
 
 
 # ------------------------------------------------------------------ Klinge (Bogen aus geneigten Abschnitten)
-cuts = np.concatenate([np.linspace(0, 0.86, SEG_MAIN + 1)[:-1], np.linspace(0.86, 1.0, SEG_TIP + 1)]) * L_BLADE
-for i in range(len(cuts) - 1):
+cuts = np.linspace(0, YOKOTE, SEG_MAIN + 1) * L_BLADE
+for i in range(SEG_MAIN):
     s0, s1 = cuts[i], cuts[i + 1]
     sm = (s0 + s1) / 2
     x0c, y0c, _ = arc(s0)
     _, ym, ang = arc(sm)
-    seg_len = (s1 - s0) * 1.04                      # etwas Überlappung, damit außen keine Fugen bleiben
+    seg_len = (s1 - s0) * 1.004                     # kaum Überlappung (sonst flackern übereinanderliegende Flächen)
+    dz = 0.006 * (i % 2)                            # Nachbarn minimal versetzt: keine exakt gleichen Flächen
     b_, e_ = back_at(ym), edge_at(ym)
-    split = max(b_ + 0.12, e_ - EDGE_STRIP)
-    first, last = i == 0, i == len(cuts) - 2
+    split = e_ - EDGE_STRIP
     v0, v1 = 16 * s1 / L_BLADE, 16 * s0 / L_BLADE
     fu = [0, r(16 - v0), r(16 * (split - b_) / (EDGE0 - BACK)), r(16 - v1)]
     faces = {"north": {"uv": fu, "texture": "#blade"}, "south": {"uv": fu, "texture": "#blade"},
              "west": {"uv": [0, 0, 4, 16], "texture": "#back"}}
-    if first:
+    ef = {"north": {"uv": [0, 0, 16, 16], "texture": "#edge"}, "south": {"uv": [0, 0, 16, 16], "texture": "#edge"},
+          "east": {"uv": [12, 0, 16, 16], "texture": "#edge"}}
+    if i == 0:
         faces["down"] = {"uv": [0, 0, 4, 2], "texture": "#back"}
-    if last:
+        ef["down"] = {"uv": [12, 0, 16, 2], "texture": "#edge"}
+    elements.append(rbox(8 + x0c, y0c, b_, split, seg_len, 7.72 - dz, 8.28 + dz, ang, faces, light=6))
+    elements.append(rbox(8 + x0c, y0c, split, e_, seg_len, 7.85 - dz, 8.15 + dz, ang, ef, light=8))
+
+# Spitze (Kissaki): Galaxie in feinen Stufen, darüber eine durchgehende helle Schneide entlang der Schräge,
+# die die Stufen-Ecken verdeckt -> saubere, gerade Spitze
+kcuts = np.linspace(YOKOTE, 1.0, SEG_TIP + 1) * L_BLADE
+for i in range(SEG_TIP):
+    s0, s1 = kcuts[i], kcuts[i + 1]
+    x0c, y0c, _ = arc(s0)
+    _, ym, ang = arc((s0 + s1) / 2)
+    _, y1w, _ = arc(s1)
+    b_ = back_at(ym)
+    e1 = edge_at(y1w)                                # Schräge am oberen Ende: Stufe bleibt innerhalb der Linie
+    top = max(b_ + 0.06, e1 - 0.04)
+    v0, v1 = 16 * s1 / L_BLADE, 16 * s0 / L_BLADE
+    fu = [0, r(16 - v0), r(16 * (top - b_) / (EDGE0 - BACK)), r(16 - v1)]
+    dz = 0.006 * ((i + SEG_MAIN) % 2)
+    faces = {"north": {"uv": fu, "texture": "#blade"}, "south": {"uv": fu, "texture": "#blade"},
+             "west": {"uv": [0, 0, 4, 16], "texture": "#back"}}
+    if i == SEG_TIP - 1:
         faces["up"] = {"uv": [0, 0, 4, 2], "texture": "#back"}
-    if e_ - split <= 0.02:
-        faces["east"] = {"uv": [0, 0, 4, 16], "texture": "#back"}
-    elements.append(rbox(8 + x0c, y0c, b_, split, seg_len, 7.72, 8.28, ang, faces, light=6))
-    if e_ - split > 0.02:
-        ef = {"north": {"uv": [0, 0, 16, 16], "texture": "#edge"}, "south": {"uv": [0, 0, 16, 16], "texture": "#edge"},
-              "east": {"uv": [12, 0, 16, 16], "texture": "#edge"}}
-        if first:
-            ef["down"] = {"uv": [12, 0, 16, 2], "texture": "#edge"}
-        if s1 >= 0.86 * L_BLADE - 1e-6 or last:
-            ef["up"] = {"uv": [12, 0, 16, 2], "texture": "#edge"}
-        elements.append(rbox(8 + x0c, y0c, split, e_, seg_len, 7.85, 8.15, ang, ef, light=8))
+    elements.append(rbox(8 + x0c, y0c, b_, top, (s1 - s0) * 1.004, 7.74 - dz, 8.26 + dz, ang, faces, light=6))
+# helle Schneide entlang der runden Spitze: kurze Stücke, jedes von Punkt zu Punkt der Kurve
+KF = {"north": {"uv": [0, 0, 16, 16], "texture": "#edge"}, "south": {"uv": [0, 0, 16, 16], "texture": "#edge"},
+      "east": {"uv": [12, 0, 16, 16], "texture": "#edge"}, "up": {"uv": [12, 0, 16, 2], "texture": "#edge"},
+      "down": {"uv": [12, 0, 16, 2], "texture": "#edge"}}
+kp = np.linspace(YOKOTE, 1.0, 6) * L_BLADE
+for j in range(len(kp) - 1):
+    xa, ya, anga = arc(kp[j])
+    xb2, yb2, angb = arc(kp[j + 1])
+    ea, eb = edge_at(ya), edge_at(yb2)
+    pa = np.array([xa + ea * np.cos(np.radians(anga)), ya + ea * np.sin(np.radians(anga))])
+    pb = np.array([xb2 + eb * np.cos(np.radians(angb)), yb2 + eb * np.sin(np.radians(angb))])
+    d = pb - pa
+    seg = float(np.hypot(*d)) * 1.03
+    ang_cut = float(np.degrees(np.arctan2(-d[0], d[1])))          # gegen den Uhrzeigersinn = zum Rücken hin
+    w = EDGE_STRIP * (0.95 - 0.12 * j)
+    elements.append(rbox(8 + pa[0], pa[1], -w, 0.0, seg, 7.7 - 0.004 * (j % 2), 8.3 + 0.004 * (j % 2), ang_cut, KF, light=8))
 
 # ------------------------------------------------------------------ Habaki, Tsuba, Griff
 CF = {k: {"uv": [0, 0, 16, 16], "texture": "#collar"} for k in ("north", "south", "east", "west", "up", "down")}
@@ -291,31 +316,16 @@ GF = {k: {"uv": [0, 0, 16, 16], "texture": "#grip"} for k in ("north", "south", 
 elements.append(box(7.1, 8.9, -2.5, 2.45, 7.35, 8.65, GF))                     # Tsuka
 elements.append(box(6.98, 9.02, -3.0, -2.5, 7.25, 8.75, dict(MF, **{"down": {"uv": [4, 4, 12, 12], "texture": "#metal"}})))  # Kashira
 
-# ------------------------------------------------------------------ schwebende Splitter (3D-Würfel)
-SH = {k: {"uv": [0, 0, 16, 16], "texture": "#shard"} for k in ("north", "south", "east", "west", "up", "down")}
-for k in range(5):
-    t = 0.45 + 0.5 * rng.random()
-    y = BASE_Y + t * (TIP_Y - BASE_Y) - 0.5
-    base_x = 8 + curve(y) + back_at(y)
-    dist = 0.5 + 2.6 * rng.random() * t
-    x = base_x - dist
-    s = 0.3 - 0.16 * (dist / 3.1) + 0.04 * rng.random()
-    zc = 8 + (rng.random() - 0.5) * 1.6
-    sx_, sy_ = to_screen(x, y + dist * 0.5)
-    if not (0.6 < sx_ < 15.4 and 0.6 < sy_ < 15.4):
-        continue
-    elements.append(box(x - s / 2, x + s / 2, y + dist * 0.5 - s / 2, y + dist * 0.5 + s / 2, zc - s / 2, zc + s / 2, SH, light=14))
-
 # ------------------------------------------------------------------ Partikel-Flächen (animiert)
 # Fläche A in der Klingenebene (vom Rücken weg), Fläche B quer dazu. Jeder Pixel weiß, wo er im Modell liegt –
 # Partikel, die aus dem Slot ragen würden, werden weggelassen.
 PX0, PX1, PY0, PY1 = 8 - 6.0, 8 + 0.2, 7.5, 20.2
-PW, PHt, PF = 40, 80, 16
+PW, PHt, PF = 40, 80, 40                 # 40 Bilder à 1 Tick = 2 s, flüssig
 
 
 def particle_frames(seed, side):
     rr = np.random.default_rng(seed)
-    n = 95
+    n = 75
     t0 = 0.3 + 0.7 * rr.random(n) ** 0.6                 # wo am Rücken (0 Wurzel … 1 Spitze)
     ph = rr.random(n)
     spd = 0.35 + 0.9 * rr.random(n) ** 1.5               # viele bleiben nah am Rücken
@@ -361,19 +371,45 @@ def particle_frames(seed, side):
 
 
 pa, aa = particle_frames(5, False)
-save("dust", pa, aa, frame_h=PHt, frametime=2, interpolate=False)
+save("dust", pa, aa, frame_h=PHt, frametime=1, interpolate=False)
 pb, ab = particle_frames(9, True)
-save("dust_side", pb, ab, frame_h=PHt, frametime=2, interpolate=False)
+save("dust_side", pb, ab, frame_h=PHt, frametime=1, interpolate=False)
 DF = {"uv": [0, 0, 16, 16], "texture": "#dust"}
 elements.append(box(PX0, PX1, PY0, PY1, 8.0, 8.0, {"north": dict(DF), "south": dict(DF)}, light=14, shade=False))
-xm = 8 + curve(14) + back_at(14)
+xm = 8 + curve(14)                               # Mitte der Klinge: liegt in keiner Außenfläche
 DS = {"uv": [0, 0, 16, 16], "texture": "#dust_side"}
 elements.append(box(xm, xm, PY0, PY1, 8 - 2.35, 8 + 2.35, {"east": dict(DS), "west": dict(DS)}, light=14, shade=False))
+
+
+
+def mirror(e):
+    """Element an der Klingen-Achse (Diagonale durch 8,8) spiegeln: dreht die Klinge um ihre Längsachse.
+    Ohne das zeigen Schneide und Wölbung in der Hand zum Spieler statt nach vorne."""
+    rot = e["rotation"]
+    ox, oy, oz = rot["origin"]
+    nox, noy = 8 + (oy - 8), 8 + (ox - 8)
+    (fx, fy, fz), (tx, ty, tz) = e["from"], e["to"]
+    e["from"] = [r(nox - (tx - ox)), r(noy + (fy - oy)), fz]
+    e["to"] = [r(nox - (fx - ox)), r(noy + (ty - oy)), tz]
+    e["rotation"] = {"origin": [r(nox), r(noy), oz], "axis": "z", "angle": r(-90 - rot["angle"])}
+    faces = {}
+    for k, f in e["faces"].items():
+        f = dict(f)
+        nk = {"east": "west", "west": "east"}.get(k, k)
+        if nk in ("north", "south", "up", "down"):
+            u1, v1, u2, v2 = f["uv"]
+            f["uv"] = [u2, v1, u1, v2]
+        faces[nk] = f
+    e["faces"] = faces
+    return e
+
+
+elements = [mirror(e) for e in elements]
 
 model = {
     "gui_light": "front",
     "textures": {"particle": T + "blade", "blade": T + "blade", "edge": T + "edge", "back": T + "back",
-                 "grip": T + "grip", "metal": T + "metal", "collar": T + "collar", "shard": T + "shard",
+                 "grip": T + "grip", "metal": T + "metal", "collar": T + "collar",
                  "dust": T + "dust", "dust_side": T + "dust_side"},
     "elements": elements,
     "display": {
