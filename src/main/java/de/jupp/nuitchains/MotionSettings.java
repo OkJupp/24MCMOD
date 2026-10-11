@@ -20,7 +20,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 public record MotionSettings(float windStrength, float windSpeed, float torsionDegrees, float torsionSpeed, float emberPulse,
                              float waveDegrees, float waveLength, float wavePeriod) {
 
-    public static final MotionSettings DEFAULT = new MotionSettings(1.0F, 1.0F, 14F, 1.0F, 0.35F, 6.0F, 13F, 4.6F);
+    public static final MotionSettings DEFAULT = new MotionSettings(1.5F, 1.0F, 18F, 1.0F, 0.35F, 11.0F, 11F, 4.0F);
 
     public static final Codec<MotionSettings> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.floatRange(0F, 45F).optionalFieldOf("windStrength", DEFAULT.windStrength()).forGetter(MotionSettings::windStrength),

@@ -44,8 +44,8 @@ Wichtige Werte in `06_chains.json` → `chains`:
 | `spikes` | Stacheln pro Seite eines Glieds (0 = glatt) | 1 |
 | `lean` | Maximale Schräglage einer Kette (Grad) | 12 |
 | `topFade` | Über wie viele Blöcke die Kette oben weich aus dem Nichts eingeblendet wird (höchstens 40 % der Kettenlänge) | 150 |
-| `swingDegrees` / `swingSpeed` | Pendel-Ausschlag und Tempo | 1 / 1 |
-| `wave` | Wie stark sich die Kette beim Pendeln biegt | 0.6 |
+| `swingDegrees` / `swingSpeed` | Pendel-Ausschlag und Tempo | 1.6 / 1 |
+| `wave` | Wie stark sich die Kette beim Pendeln biegt | 0.75 |
 | `seed` | Andere Zahl = andere Verteilung | 2424 |
 
 Unter `style`: `spikeStyle` (`"studded"` = gerade Stacheln mit Kragen, `"hooks"` = gebogene Widerhaken), `spikeSize` (Größe der Stacheln, 1 = normal).
@@ -54,7 +54,7 @@ Unter `damage`: `brokenChance` (Anteil zerfallender Ketten), `brokenLinks` (wie 
 
 Unter `variation`: `sizeMin` / `sizeMax` (Größenbereich der Ketten), `giantChance` / `giantSize` (seltene Riesen-Ketten), `topYVariation` (wie stark die Aufhängehöhe schwankt), `minBottomY` (tiefster Punkt, bis zu dem eine Kette hängen darf – Standard 230).
 
-Unter `motion`: `windStrength` / `windSpeed` (gemeinsame, weiche Windböen für alle Ketten), `torsionDegrees` / `torsionSpeed` (Ketten drehen sich langsam um sich selbst), `emberPulse` (wie stark die glühenden Bruchkanten pulsieren), `waveDegrees` / `waveLength` / `wavePeriod` (leichte Welle, die wie bei einer Peitsche von oben nach unten durch die Kette läuft: Stärke, Länge in Gliedern, Sekunden pro Welle). Alles läuft nur über die Zeit – Spieler in der Nähe verändern nichts.
+Unter `motion`: `windStrength` / `windSpeed` (gemeinsame, weiche Windböen für alle Ketten), `torsionDegrees` / `torsionSpeed` (Ketten drehen sich langsam um sich selbst), `emberPulse` (wie stark die glühenden Bruchkanten pulsieren), `waveDegrees` / `waveLength` / `wavePeriod` (Welle – Standard 11° / 11 Glieder / 4 s, die wie bei einer Peitsche von oben nach unten durch die Kette läuft: Stärke, Länge in Gliedern, Sekunden pro Welle). Alles läuft nur über die Zeit – Spieler in der Nähe verändern nichts.
 
 Unter `energy` (Animationen wie beim Vorbild, rein über die Zeit, Spieler verändern nichts):
 

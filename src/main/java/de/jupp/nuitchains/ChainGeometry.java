@@ -68,8 +68,8 @@ public final class ChainGeometry {
         this.dmg = damage;
         this.var = variation;
         this.mot = motion;
-        this.meshNear = new LinkMesh(settings, style, 13, 12, 10);
-        this.meshMid = new LinkMesh(settings, style, 8, 8, 6);
+        this.meshNear = new LinkMesh(settings, style, 16, 14, 12);
+        this.meshMid = new LinkMesh(settings, style, 10, 10, 6);
         this.meshFar = new LinkMesh(settings, style, 5, 6, 4);
         this.meshTiny = new LinkMesh(settings, style, 4, 4, 3);
         this.meshDamaged = new LinkMesh(settings, style, 30, 22, 10);
@@ -131,6 +131,9 @@ public final class ChainGeometry {
      * Helligkeit 0..1 für ein glasiges Kristall-Metall: weiches Licht von oben,
      * helle Ränder (Fresnel) und ein kleiner Glanzpunkt.
      */
+    /** Richtung eines weichen Himmelslichts (von oben, leicht schräg) für scharfe Glanzlichter. */
+    static final double LX = 0.34, LY = 0.86, LZ = 0.38;
+
     static double shade(double normalY, double nDotView) {
         double lam = 0.5 + 0.5 * normalY;
         double edge = 1 - Math.abs(nDotView);
@@ -457,8 +460,8 @@ public final class ChainGeometry {
                 count += emitShard(p, sink);
             } else {
                 double ld2 = d2 / (p.scale * p.scale);           // große Glieder behalten Details länger
-                LinkMesh mesh = ld2 < 200 * 200 ? (p.damage > 0.001 ? this.meshDamaged : this.meshNear)
-                        : ld2 < 420 * 420 ? this.meshMid : ld2 < 650 * 650 ? this.meshFar : this.meshTiny;
+                LinkMesh mesh = ld2 < 240 * 240 ? (p.damage > 0.001 ? this.meshDamaged : this.meshNear)
+                        : ld2 < 520 * 520 ? this.meshMid : ld2 < 780 * 780 ? this.meshFar : this.meshTiny;
                 count += mesh.emit(p, sink);
             }
         }
@@ -817,6 +820,8 @@ public final class ChainGeometry {
         double boundR;               // größter Abstand einer Ecke von der Gliedmitte
 
         private final float[] vx, vy, vz, vV, vU, vA;
+        final float[] ao;            // Verdunkelung, wo die Nachbarglieder durchlaufen (Tiefe)
+        final float[] grain;         // feine Maserung der Oberfläche
         private final float[] qa = new float[4];
         private final boolean[] removed;
         private long[] order;
@@ -994,6 +999,23 @@ public final class ChainGeometry {
                 this.boundR = Math.max(this.boundR, Math.sqrt(pu[i] * pu[i] + pw[i] * pw[i] + pn[i] * pn[i]));
             }
             this.boundR += r * 0.5;                                  // Spielraum für Verformungen
+            // Umgebungsverdeckung: Die Nachbarglieder laufen (um 90° gedreht) durch beide Enden –
+            // dort, wo sie das Glied berühren, wird es dunkler. Gibt viel räumliche Tiefe.
+            double pitch = Math.max(0.2, s.linkLength() - 2.3 * s.thickness());
+            double contactU = pitch - this.halfLen;
+            this.ao = new float[nv];
+            this.grain = new float[nv];
+            double gs = 1.0 / Math.max(0.05, r * 0.9);
+            for (int i = 0; i < nv; i++) {
+                double occl = 0;
+                for (int sgn = -1; sgn <= 1; sgn += 2) {
+                    double du = pu[i] - sgn * contactU;
+                    double dl = Math.max(0, Math.sqrt(du * du + pw[i] * pw[i]) - r);   // Abstand zum Nachbar-Rohr
+                    occl = Math.max(occl, Math.exp(-(dl / (r * 1.4)) * (dl / (r * 1.4))));
+                }
+                this.ao[i] = (float) (1 - 0.6 * occl);
+                this.grain[i] = (float) fbm(pu[i] * gs + 3.3, pw[i] * gs, pn[i] * gs - 1.7, 0x6EA1L);
+            }
             vx = new float[nv]; vy = new float[nv]; vz = new float[nv]; vV = new float[nv]; vU = new float[nv]; vA = new float[nv];
             removed = new boolean[nq];
             order = new long[nq];
@@ -1084,7 +1106,16 @@ public final class ChainGeometry {
                 double gz = nu[idx] * p.uz + nw[idx] * p.wz + nn[idx] * p.nz;
                 double inv = farShade ? invCenter : 1.0 / Math.sqrt(x * x + y * y + z * z);
                 double ndv = -(gx * x + gy * y + gz * z) * inv;
-                vV[idx] = (float) (1.0 - shade(gy, ndv));
+                // Glanzlicht: Spiegelung eines Himmelslichts – wandert mit, wenn die Kette schwingt
+                double vl = -(x * LX + y * LY + z * LZ) * inv;
+                double rl = 2 * ndv * (gx * LX + gy * LY + gz * LZ) - vl;
+                double sp = 0;
+                if (rl > 0) {
+                    double r2 = rl * rl, r4 = r2 * r2, r8 = r4 * r4;
+                    sp = r8 * r8 * r8;
+                }
+                double light = shade(gy, ndv) * ao[idx] * (0.9 + 0.2 * grain[idx]) + 0.55 * sp * ao[idx];
+                vV[idx] = (float) (1.0 - Math.min(0.995, Math.max(0.005, light)));
                 double glow = 0;
                 if (damaged) {
                     glow = Math.min(1, Math.max(0, (d + 0.11 - nz[idx]) / 0.11));

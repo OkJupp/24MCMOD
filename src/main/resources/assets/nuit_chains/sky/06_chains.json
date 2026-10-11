@@ -22,9 +22,9 @@
     "lean": 12,
     "spikes": 1,
     "topFade": 150,
-    "swingDegrees": 1.0,
+    "swingDegrees": 1.6,
     "swingSpeed": 1.0,
-    "wave": 0.6,
+    "wave": 0.75,
     "seed": 2424
   },
   "style": {
@@ -49,14 +49,14 @@
     "minBottomY": 230
   },
   "motion": {
-    "windStrength": 1.0,
+    "windStrength": 1.5,
     "windSpeed": 1.0,
-    "torsionDegrees": 14,
+    "torsionDegrees": 18,
     "torsionSpeed": 1.0,
     "emberPulse": 0.35,
-    "waveDegrees": 6.0,
-    "waveLength": 13,
-    "wavePeriod": 4.6
+    "waveDegrees": 11.0,
+    "waveLength": 11,
+    "wavePeriod": 4.0
   },
   "energy": {
     "flow": 1.0,
