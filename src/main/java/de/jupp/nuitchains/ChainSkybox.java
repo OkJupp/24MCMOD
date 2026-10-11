@@ -162,7 +162,7 @@ public class ChainSkybox extends AbstractSkybox implements SkyboxTextureProvider
             // nahe Ketten (oder solche, die in die Welt-Geometrie reichen) jedes Bild, ferne seltener
             boolean distant = chain.distance() - chain.length() * 0.75 - 80 > Math.max(split, this.nearDistance);
             boolean onlyFar = near == null || distant;
-            int every = !distant ? 1 : chain.distance() > 700 ? 3 : 2;
+            int every = !distant ? 1 : chain.distance() > 650 ? 4 : chain.distance() > 420 ? 3 : 2;
             double mx = far.bx - ex, my = far.by - ey, mz = far.bz - ez;
             boolean moved = mx * mx + my * my + mz * mz > 0.0004 * chain.distance() * chain.distance();
             if (every == 1 || far.builtFrame == Long.MIN_VALUE || moved

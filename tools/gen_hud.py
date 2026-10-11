@@ -1,5 +1,5 @@
 """Pinkes, animiertes HUD als GUI-Sprites (Minecraft 26.3).
-Aufruf: gen_hud.py VANILLA_HUD_DIR OUT_HUD_DIR
+Aufruf: gen_hud.py VANILLA_HUD_DIR OUT_HUD_DIR [FX_DIR]
 Alle Maße in GUI-Pixeln; Texturen in S-facher Auflösung, animiert als senkrechte Bildstreifen + .mcmeta."""
 import sys, os, json, math
 import numpy as np
@@ -91,15 +91,13 @@ def to_img(arr):
     return Image.fromarray((np.clip(arr, 0, 1) * 255 + 0.5).astype(np.uint8), "RGBA")
 
 def save_anim(name, frames, frametime, w, h, interpolate=True):
-    strip = Image.new("RGBA", (w * S, h * S * len(frames)))
-    for k, f in enumerate(frames):
-        strip.paste(to_img(f), (0, k * h * S))
+    """Nur das erste Bild als feste Grafik: animierte GUI-Sprites werden in 26.3 nicht zuverlässig
+    in den GUI-Atlas geschrieben (bleiben sonst lila-schwarz). Die Bewegung kommt per Code (PinkHud)."""
     path = os.path.join(OUT, name + ".png")
-    strip.save(path, optimize=True)
-    meta = {"animation": {"frametime": frametime, "interpolate": interpolate, "width": w * S, "height": h * S}}
-    with open(path + ".mcmeta", "w") as fh:
-        json.dump(meta, fh, indent=2)
-    print("saved", name, strip.size)
+    to_img(frames[0]).save(path, optimize=True)
+    if os.path.exists(path + ".mcmeta"):
+        os.remove(path + ".mcmeta")
+    print("saved", name, "(static)")
 
 def save_static(name, arr):
     to_img(arr).save(os.path.join(OUT, name + ".png"), optimize=True)
@@ -298,15 +296,11 @@ def glint_frames(base, N=30, active=7):
     return frames
 
 def save_icon_anim(name, frames, frametime=2):
-    h, w = frames[0].shape[:2]
-    strip = Image.new("RGBA", (w, h * len(frames)))
-    for k, f in enumerate(frames):
-        strip.paste(to_img(f), (0, k * h))
     path = os.path.join(OUT, name + ".png")
-    strip.save(path, optimize=True)
-    with open(path + ".mcmeta", "w") as fh:
-        json.dump({"animation": {"frametime": frametime, "width": w, "height": h}}, fh, indent=2)
-    print("saved", name)
+    to_img(frames[-1]).save(path, optimize=True)     # letztes Bild = ohne Glanzlicht
+    if os.path.exists(path + ".mcmeta"):
+        os.remove(path + ".mcmeta")
+    print("saved", name, "(static)")
 
 def icons():
     # Herzen: pink, normale Herzen mit Glanz
@@ -346,6 +340,36 @@ def icons():
     out[..., :3] = np.array([30, 6, 34]) / 255 * (1 - lum) + np.array([200, 110, 200]) / 255 * lum
     save_static("food_empty", up(out))
 
+def fx_sprites(fx_dir):
+    """Kleine Leucht-Sprites, die PinkHud jedes Bild an wechselnden Stellen zeichnet."""
+    os.makedirs(fx_dir, exist_ok=True)
+    n = 32
+    yy, xx = np.mgrid[0:n, 0:n]
+    r = np.hypot((xx + 0.5) / n * 2 - 1, (yy + 0.5) / n * 2 - 1)
+    a = np.clip(np.exp(-(r / 0.22) ** 2) * 1.0 + np.exp(-(r / 0.55) ** 2) * 0.45, 0, 1) * np.clip((1 - r) / 0.2, 0, 1)
+    col = np.ones((n, n, 3)) * np.array([1.0, 0.86, 0.97])
+    to_img(np.concatenate([col, a[..., None]], -1)).save(os.path.join(fx_dir, "pulse.png"))
+    # Funke: kleines Kreuz
+    m = 16
+    yy, xx = np.mgrid[0:m, 0:m]
+    cx, cy = (xx + 0.5) / m * 2 - 1, (yy + 0.5) / m * 2 - 1
+    r = np.hypot(cx, cy)
+    a = np.exp(-(r / 0.18) ** 2) + (np.exp(-np.abs(cx) / 0.07) * np.exp(-np.abs(cy) / 0.6) + np.exp(-np.abs(cy) / 0.07) * np.exp(-np.abs(cx) / 0.6)) * 0.7
+    a = np.clip(a, 0, 1) * np.clip((1 - r) / 0.15, 0, 1)
+    col = np.ones((m, m, 3))
+    to_img(np.concatenate([col, a[..., None]], -1)).save(os.path.join(fx_dir, "spark.png"))
+    # Schein um einen Slot-Rahmen (22x22) und um den Auswahl-Rahmen (24x23)
+    for name, (W, H, x0, y0, x1, y1, rr) in {"slot_glow": (22, 22, 1.8, 1.8, 20.2, 20.2, 2.2),
+                                             "selection_glow": (24, 23, 1.6, 1.6, 22.4, 22.4, 3.0)}.items():
+        X, Y = grid(W, H)
+        d = sd_rrect(X, Y, x0, y0, x1, y1, rr)
+        a = np.clip(np.exp(-(d / 0.6) ** 2) * 0.9 + np.exp(-np.abs(d) / 1.4) * 0.35, 0, 1)
+        col = np.ones(X.shape + (3,)) * PINK_HI
+        to_img(np.concatenate([col, a[..., None]], -1)).save(os.path.join(fx_dir, name + ".png"))
+    print("saved fx sprites")
+
+if len(sys.argv) > 3:
+    fx_sprites(sys.argv[3])
 hotbar()
 selection()
 offhand("left")

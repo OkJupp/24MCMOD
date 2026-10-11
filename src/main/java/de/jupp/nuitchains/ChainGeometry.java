@@ -198,7 +198,15 @@ public final class ChainGeometry {
     }
 
     private double pitch() {
-        return Math.max(0.2, s.linkLength() - 2.3 * s.thickness());
+        return pitchOf(s);
+    }
+
+    /**
+     * Abstand von Glied-Mitte zu Glied-Mitte wie bei einer echten Kette: Länge minus zwei Drahtstärken
+     * (Drahtstärke = 2 × Rohr-Radius). Dann liegt jedes Glied im Loch des nächsten auf, statt in ihm zu stecken.
+     */
+    static double pitchOf(ChainSettings s) {
+        return Math.max(0.2, s.linkLength() - 3.95 * s.thickness());
     }
 
     // ------------------------------------------------------------------ Aufbau einer Kette
@@ -1005,7 +1013,7 @@ public final class ChainGeometry {
             this.boundR += r * 0.5;                                  // Spielraum für Verformungen
             // Umgebungsverdeckung: Die Nachbarglieder laufen (um 90° gedreht) durch beide Enden –
             // dort, wo sie das Glied berühren, wird es dunkler. Gibt viel räumliche Tiefe.
-            double pitch = Math.max(0.2, s.linkLength() - 2.3 * s.thickness());
+            double pitch = pitchOf(s);
             double contactU = pitch - this.halfLen;
             this.ao = new float[nv];
             this.grain = new float[nv];
