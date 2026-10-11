@@ -457,12 +457,11 @@ model = {
         "ground": {"rotation": [0, 0, 0], "translation": [0, 2, 0], "scale": [0.5, 0.5, 0.5]},
         "head": {"rotation": [0, 180, 0], "translation": [0, 13, 7], "scale": [1, 1, 1]},
         "fixed": {"rotation": [0, 180, 0], "scale": [1, 1, 1]},
-        "thirdperson_righthand": {"rotation": [0, -90, 55], "translation": [0, 3.5, 0.5], "scale": [0.75, 0.75, 0.75]},
-        "thirdperson_lefthand": {"rotation": [0, 90, -55], "translation": [0, 3.5, 0.5], "scale": [0.75, 0.75, 0.75]},
-        # z-Drehung 50 statt 25: Klinge steht aufrechter und zeigt leicht nach vorne (weg von dir)
-        # deutlich höher (y 10), damit Griff und Stichblatt im Bild sind
-        "firstperson_righthand": {"rotation": [0, -90, 50], "translation": [1.13, 10.0, 1.13], "scale": [0.78, 0.78, 0.78]},
-        "firstperson_lefthand": {"rotation": [0, 90, -50], "translation": [1.13, 10.0, 1.13], "scale": [0.78, 0.78, 0.78]},
+        # wie ein Vanilla-Schwert (item/handheld)
+        "thirdperson_righthand": {"rotation": [0, -90, 55], "translation": [0, 4.0, 0.5], "scale": [0.85, 0.85, 0.85]},
+        "thirdperson_lefthand": {"rotation": [0, 90, -55], "translation": [0, 4.0, 0.5], "scale": [0.85, 0.85, 0.85]},
+        "firstperson_righthand": {"rotation": [0, -90, 25], "translation": [1.13, 3.2, 1.13], "scale": [0.68, 0.68, 0.68]},
+        "firstperson_lefthand": {"rotation": [0, 90, -25], "translation": [1.13, 3.2, 1.13], "scale": [0.68, 0.68, 0.68]},
     },
 }
 with open(MODEL, "w") as f:
