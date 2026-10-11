@@ -310,7 +310,7 @@ elements.append(box(8 + BACK - 0.05, 8 + EDGE0 + 0.05, 3.5, BASE_Y, 7.62, 8.38, 
 MF = {k: {"uv": [0, 0, 16, 16], "texture": "#metal"} for k in ("north", "south", "east", "west", "up", "down")}
 MS = {k: {"uv": [2, 2, 14, 14], "texture": "#metal"} for k in ("east", "west", "north", "south")}
 elements.append(box(5.4, 10.6, 2.85, 3.6, 6.5, 9.5, MF))
-elements.append(box(6.1, 9.9, 2.85, 3.6, 5.9, 10.1, MF))
+elements.append(box(6.1, 9.9, 2.88, 3.57, 5.9, 10.1, MF))   # etwas flacher: Ober-/Unterseiten nicht deckungsgleich (Flackern)
 elements.append(box(6.95, 9.05, 2.45, 2.85, 7.25, 8.75, CF, light=2))          # Fuchi
 GF = {k: {"uv": [0, 0, 16, 16], "texture": "#grip"} for k in ("north", "south", "east", "west")}
 elements.append(box(7.1, 8.9, -2.5, 2.45, 7.35, 8.65, GF))                     # Tsuka
@@ -419,8 +419,9 @@ model = {
         "fixed": {"rotation": [0, 180, 0], "scale": [1, 1, 1]},
         "thirdperson_righthand": {"rotation": [0, -90, 55], "translation": [0, 3.5, 0.5], "scale": [0.75, 0.75, 0.75]},
         "thirdperson_lefthand": {"rotation": [0, 90, -55], "translation": [0, 3.5, 0.5], "scale": [0.75, 0.75, 0.75]},
-        "firstperson_righthand": {"rotation": [0, -90, 25], "translation": [1.13, 2.4, 1.13], "scale": [0.55, 0.55, 0.55]},
-        "firstperson_lefthand": {"rotation": [0, 90, -25], "translation": [1.13, 2.4, 1.13], "scale": [0.55, 0.55, 0.55]},
+        # z-Drehung 50 statt 25: Klinge steht aufrechter und zeigt leicht nach vorne (weg von dir)
+        "firstperson_righthand": {"rotation": [0, -90, 50], "translation": [1.13, 3.0, 1.13], "scale": [0.66, 0.66, 0.66]},
+        "firstperson_lefthand": {"rotation": [0, 90, -50], "translation": [1.13, 3.0, 1.13], "scale": [0.66, 0.66, 0.66]},
     },
 }
 with open(MODEL, "w") as f:
