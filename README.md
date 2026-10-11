@@ -6,7 +6,7 @@ Client-Mod für **Minecraft 26.3 (Fabric)** und Addon für [Nuit](https://modrin
 - **Echte 3D-Ketten** hängen überall in der Welt hoch am Himmel. Man kann drunter durchlaufen, sieht sie von unten und von der Seite, und sie pendeln leicht.
 - **Tag und Nacht:** tagsüber ein heller, dunstiger Rosé-Himmel mit pinker Sonne, morgens und abends ein Orange-Magenta-Glühen, nachts die Pink-Galaxie mit Sternen und pinkem Mond. Die Ketten leuchten nachts voll und stehen tagsüber als Silhouetten im Dunst.
 - **Nebelbänke** treiben in der Ferne am Himmel, die Ketten tauchen darin ein und kommen daraus hervor.
-- **Pinkes HUD und Rauch-Dolch als Totem** (3D-Dolch mit glühenden Runen und animiertem Rauch, pinke Totem-Partikel).
+- **Pinkes HUD und Galaxy-Katana als Totem** (3D-Katana mit Weltraum-Klinge, die in Pixel zerfällt, pinke Totem-Partikel).
 - Rein clientseitig, funktioniert also auch auf fremden Servern.
 
 ## Installieren
@@ -143,7 +143,7 @@ Hotbar, Auswahl-Rahmen, Nebenhand, Herzen, Rüstung, Essen und XP-Leiste sind pi
 
 Das HUD ist ein eingebautes Ressourcenpaket **„Pinkes HUD (Nuit Chains)“** – standardmäßig an, unter *Optionen → Ressourcenpakete* abschaltbar. Die Grafiken erzeugt `tools/gen_hud.py` (Farben und Animation stehen oben im Skript).
 
-Im selben Paket steckt das **Totem der Unsterblichkeit** als 3D-Dolch: Obsidian-Klinge mit hellen Schneiden, erhabener Grat mit glühenden Runen (ein Leuchtpuls läuft zur Spitze), Parierstange mit Kristall, umwickelter Griff, Kristall-Knauf. Um die Klinge ziehen zwei gekreuzte Flächen mit animiertem, leicht glühendem Rauch. Modell und Texturen erzeugt `tools/gen_dagger.py` (Maße, Farben und Rauch stehen im Skript; Modell: `assets/nuit_chains/models/item/smoke_dagger.json` im Paket). Das Paket ersetzt auch die Item-Definition `assets/minecraft/items/totem_of_undying.json`, damit andere Pakete (z. B. „Enchantment Glows“, das in der Hand ein eigenes 3D-Totem zeigt) den Dolch nicht verdrängen – dafür muss „Pinkes HUD (Nuit Chains)“ in der Ressourcenpaket-Liste **über** diesen Paketen stehen. Solange das Paket an ist, sind auch die Totem-Partikel pink statt grün. Sonne, Mond und Nebelschwaden erzeugt `tools/gen_sky_extras.py`.
+Im selben Paket steckt das **Totem der Unsterblichkeit** als 3D-**Galaxy-Katana**: leicht gebogene Klinge mit Weltraum-Muster (pink-violette Nebel, funkelnde Sterne – animiert), helle Schneide, schräge Spitze; vom Klingenrücken lösen sich Pixel-Partikel und treiben davon (animiert, plus ein paar schwebende Würfel). Schwarz gewickelter Griff mit violett-pinken Rauten, dunkles Stichblatt. Modell und Texturen erzeugt `tools/gen_katana.py` (Maße, Krümmung, Farben und Partikel stehen oben im Skript; Modell: `assets/nuit_chains/models/item/galaxy_katana.json` im Paket). Das Paket ersetzt auch die Item-Definition `assets/minecraft/items/totem_of_undying.json`, damit andere Pakete (z. B. „Enchantment Glows“, das in der Hand ein eigenes 3D-Totem zeigt) das Katana nicht verdrängen – dafür muss „Pinkes HUD (Nuit Chains)“ in der Ressourcenpaket-Liste **über** diesen Paketen stehen. Solange das Paket an ist, sind auch die Totem-Partikel pink statt grün. Sonne, Mond und Nebelschwaden erzeugt `tools/gen_sky_extras.py`.
 
 ## Neue Effekte hinzufügen
 
