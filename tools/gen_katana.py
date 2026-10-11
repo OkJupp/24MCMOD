@@ -74,16 +74,28 @@ def fbm(w, h, seed, base=(3, 12), octaves=5):
 
 # ------------------------------------------------------------------ Maße (senkrecht, Mitte x=z=8)
 BASE_Y, TIP_Y = 4.2, 19.3          # Klinge von der Manschette bis zur Spitze
-BACK, EDGE0 = -1.0, 1.05            # Rücken / Schneide relativ zur Mittellinie (unten)
-CURVE = 1.4                          # Krümmung: so weit wandert die Spitze zum Rücken hin
-EDGE_STRIP = 0.42                    # Breite der hellen Schneide
-K = 0.9                              # Gesamtgröße (passt so diagonal in den Slot, mit etwas Rand)
-SEG = 15                             # Abschnitte der Klinge (mehr = rundere Krümmung)
+BACK, EDGE0 = -0.85, 0.9            # Rücken / Schneide relativ zur Mittellinie (unten)
+BEND = 11.0                          # Krümmung: so viele Grad dreht die Klinge bis zur Spitze zum Rücken hin
+EDGE_STRIP = 0.36                    # Breite der hellen Schneide
+K = 0.84                             # Gesamtgröße (passt so diagonal in den Slot, mit etwas Rand)
+SEG_MAIN, SEG_TIP = 12, 6           # Abschnitte der Klinge / der schrägen Spitze
+L_BLADE = TIP_Y - BASE_Y
+
+# Mittellinie als Bogen: der Winkel wächst gleichmäßig -> runde Krümmung ohne Stufen
+_s = np.linspace(0, L_BLADE, 400)
+_ang = np.radians(BEND) * _s / L_BLADE
+_cx = -np.concatenate([[0], np.cumsum(np.sin(_ang[:-1]) * np.diff(_s))])
+_cy = BASE_Y + np.concatenate([[0], np.cumsum(np.cos(_ang[:-1]) * np.diff(_s))])
+
+
+def arc(sv):
+    """Punkt (x-Versatz, y) und Winkel (Grad) der Mittellinie bei Bogenlänge sv."""
+    return np.interp(sv, _s, _cx), np.interp(sv, _s, _cy), BEND * sv / L_BLADE
 
 
 def curve(y):
-    t = np.clip((y - BASE_Y) / (TIP_Y - BASE_Y), 0, 1)
-    return -CURVE * t ** 1.8
+    """x-Versatz der Mittellinie auf Höhe y (für Partikel und Splitter)."""
+    return np.interp(y, _cy, _cx)
 
 
 def edge_at(y):
@@ -222,31 +234,50 @@ def bv(y):
 
 
 elements = []
-# ------------------------------------------------------------------ Klinge (gebogen, in Abschnitten)
-ys = np.linspace(BASE_Y, TIP_Y, SEG + 1)
-for i in range(SEG):
-    y0, y1 = ys[i], ys[i + 1]
-    ym = (y0 + y1) / 2
-    off = curve(ym)
-    b, e = back_at(ym), edge_at(ym)
-    # Kern (Galaxie) vom Rücken bis zur Schneide, Schneide als dünnerer heller Streifen davor
-    split = max(b + 0.12, e - EDGE_STRIP)
-    xb, xs, xe = 8 + off + b, 8 + off + split, 8 + off + e
-    fu = [0, r(bv(y1)), r(16 * (split - b) / (EDGE0 - BACK)), r(bv(y0))]
-    elements.append(box(xb, xs, y0, y1, 7.72, 8.28, {
-        "north": {"uv": fu, "texture": "#blade"}, "south": {"uv": fu, "texture": "#blade"},
-        "west": {"uv": [0, 0, 4, 16], "texture": "#back"},
-        "up": {"uv": [0, 0, 4, 2], "texture": "#back"}, "down": {"uv": [0, 0, 4, 2], "texture": "#back"},
-    }, light=6))
-    if xe - xs > 0.02:
-        elements.append(box(xs, xe, y0, y1, 7.85, 8.15, {
-            "north": {"uv": [0, 0, 16, 16], "texture": "#edge"}, "south": {"uv": [0, 0, 16, 16], "texture": "#edge"},
-            "east": {"uv": [12, 0, 16, 16], "texture": "#edge"},
-            "up": {"uv": [12, 0, 16, 2], "texture": "#edge"}, "down": {"uv": [12, 0, 16, 2], "texture": "#edge"},
-        }, light=8))
-# Spitze: kleiner heller Punkt
-elements.append(box(8 + curve(TIP_Y) + back_at(TIP_Y), 8 + curve(TIP_Y) + back_at(TIP_Y) + 0.35, TIP_Y, TIP_Y + 0.4, 7.88, 8.12,
-                    {k: {"uv": [12, 0, 16, 4], "texture": "#edge"} for k in ("north", "south", "east", "west", "up")}, light=12))
+
+
+def rbox(px, py, x0, x1, length, z0, z1, ang, faces, light=0, shade=True):
+    """Quader, der am Mittellinien-Punkt (px, py) beginnt und um ang Grad (zum Rücken hin) geneigt ist."""
+    qx, qy = to_screen(px, py)
+    e = {"from": [r(qx + x0 * K), r(qy), r(km(z0))], "to": [r(qx + x1 * K), r(qy + length * K), r(km(z1))],
+         "rotation": {"origin": [r(qx), r(qy), 8], "axis": "z", "angle": r(-45 + ang)}, "faces": faces}
+    if light:
+        e["light_emission"] = light
+    if not shade:
+        e["shade"] = False
+    return e
+
+
+# ------------------------------------------------------------------ Klinge (Bogen aus geneigten Abschnitten)
+cuts = np.concatenate([np.linspace(0, 0.86, SEG_MAIN + 1)[:-1], np.linspace(0.86, 1.0, SEG_TIP + 1)]) * L_BLADE
+for i in range(len(cuts) - 1):
+    s0, s1 = cuts[i], cuts[i + 1]
+    sm = (s0 + s1) / 2
+    x0c, y0c, _ = arc(s0)
+    _, ym, ang = arc(sm)
+    seg_len = (s1 - s0) * 1.04                      # etwas Überlappung, damit außen keine Fugen bleiben
+    b_, e_ = back_at(ym), edge_at(ym)
+    split = max(b_ + 0.12, e_ - EDGE_STRIP)
+    first, last = i == 0, i == len(cuts) - 2
+    v0, v1 = 16 * s1 / L_BLADE, 16 * s0 / L_BLADE
+    fu = [0, r(16 - v0), r(16 * (split - b_) / (EDGE0 - BACK)), r(16 - v1)]
+    faces = {"north": {"uv": fu, "texture": "#blade"}, "south": {"uv": fu, "texture": "#blade"},
+             "west": {"uv": [0, 0, 4, 16], "texture": "#back"}}
+    if first:
+        faces["down"] = {"uv": [0, 0, 4, 2], "texture": "#back"}
+    if last:
+        faces["up"] = {"uv": [0, 0, 4, 2], "texture": "#back"}
+    if e_ - split <= 0.02:
+        faces["east"] = {"uv": [0, 0, 4, 16], "texture": "#back"}
+    elements.append(rbox(8 + x0c, y0c, b_, split, seg_len, 7.72, 8.28, ang, faces, light=6))
+    if e_ - split > 0.02:
+        ef = {"north": {"uv": [0, 0, 16, 16], "texture": "#edge"}, "south": {"uv": [0, 0, 16, 16], "texture": "#edge"},
+              "east": {"uv": [12, 0, 16, 16], "texture": "#edge"}}
+        if first:
+            ef["down"] = {"uv": [12, 0, 16, 2], "texture": "#edge"}
+        if s1 >= 0.86 * L_BLADE - 1e-6 or last:
+            ef["up"] = {"uv": [12, 0, 16, 2], "texture": "#edge"}
+        elements.append(rbox(8 + x0c, y0c, split, e_, seg_len, 7.85, 8.15, ang, ef, light=8))
 
 # ------------------------------------------------------------------ Habaki, Tsuba, Griff
 CF = {k: {"uv": [0, 0, 16, 16], "texture": "#collar"} for k in ("north", "south", "east", "west", "up", "down")}
@@ -262,13 +293,13 @@ elements.append(box(6.98, 9.02, -3.0, -2.5, 7.25, 8.75, dict(MF, **{"down": {"uv
 
 # ------------------------------------------------------------------ schwebende Splitter (3D-Würfel)
 SH = {k: {"uv": [0, 0, 16, 16], "texture": "#shard"} for k in ("north", "south", "east", "west", "up", "down")}
-for k in range(9):
+for k in range(5):
     t = 0.45 + 0.5 * rng.random()
     y = BASE_Y + t * (TIP_Y - BASE_Y) - 0.5
     base_x = 8 + curve(y) + back_at(y)
     dist = 0.5 + 2.6 * rng.random() * t
     x = base_x - dist
-    s = 0.42 - 0.25 * (dist / 3.1) + 0.06 * rng.random()
+    s = 0.3 - 0.16 * (dist / 3.1) + 0.04 * rng.random()
     zc = 8 + (rng.random() - 0.5) * 1.6
     sx_, sy_ = to_screen(x, y + dist * 0.5)
     if not (0.6 < sx_ < 15.4 and 0.6 < sy_ < 15.4):
@@ -284,11 +315,11 @@ PW, PHt, PF = 40, 80, 16
 
 def particle_frames(seed, side):
     rr = np.random.default_rng(seed)
-    n = 130
-    t0 = 0.25 + 0.75 * rr.random(n) ** 0.6               # wo am Rücken (0 Wurzel … 1 Spitze)
+    n = 95
+    t0 = 0.3 + 0.7 * rr.random(n) ** 0.6                 # wo am Rücken (0 Wurzel … 1 Spitze)
     ph = rr.random(n)
     spd = 0.35 + 0.9 * rr.random(n) ** 1.5               # viele bleiben nah am Rücken
-    size = rr.choice([1, 2, 2, 3], n)
+    size = rr.choice([1, 1, 2], n)
     hue = rr.random(n)
     frames, alphas = [], []
     for f in range(PF):
@@ -350,10 +381,10 @@ model = {
         "ground": {"rotation": [0, 0, 0], "translation": [0, 2, 0], "scale": [0.5, 0.5, 0.5]},
         "head": {"rotation": [0, 180, 0], "translation": [0, 13, 7], "scale": [1, 1, 1]},
         "fixed": {"rotation": [0, 180, 0], "scale": [1, 1, 1]},
-        "thirdperson_righthand": {"rotation": [0, -90, 55], "translation": [0, 4.0, 0.5], "scale": [0.85, 0.85, 0.85]},
-        "thirdperson_lefthand": {"rotation": [0, 90, -55], "translation": [0, 4.0, 0.5], "scale": [0.85, 0.85, 0.85]},
-        "firstperson_righthand": {"rotation": [0, -90, 25], "translation": [1.13, 3.2, 1.13], "scale": [0.68, 0.68, 0.68]},
-        "firstperson_lefthand": {"rotation": [0, 90, -25], "translation": [1.13, 3.2, 1.13], "scale": [0.68, 0.68, 0.68]},
+        "thirdperson_righthand": {"rotation": [0, -90, 55], "translation": [0, 3.5, 0.5], "scale": [0.75, 0.75, 0.75]},
+        "thirdperson_lefthand": {"rotation": [0, 90, -55], "translation": [0, 3.5, 0.5], "scale": [0.75, 0.75, 0.75]},
+        "firstperson_righthand": {"rotation": [0, -90, 25], "translation": [1.13, 2.4, 1.13], "scale": [0.55, 0.55, 0.55]},
+        "firstperson_lefthand": {"rotation": [0, 90, -25], "translation": [1.13, 2.4, 1.13], "scale": [0.55, 0.55, 0.55]},
     },
 }
 with open(MODEL, "w") as f:
