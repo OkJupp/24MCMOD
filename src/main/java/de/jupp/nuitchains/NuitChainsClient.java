@@ -37,6 +37,8 @@ public class NuitChainsClient implements ClientModInitializer {
         NuitApi.registerSkyboxType(id("chains"), 1, ChainSkybox.CODEC);
         // JSON: "type": "nuit_chains:lightning"
         NuitApi.registerSkyboxType(id("lightning"), 1, LightningSkybox.CODEC);
+        // JSON: "type": "nuit_chains:stars"
+        NuitApi.registerSkyboxType(id("stars"), 1, StarsSkybox.CODEC);
 
         // Vanilla-Wolken ausblenden, solange eine Ketten-Skybox aktiv ist ("hideClouds")
         // (gilt auch für die eigenen LOD-Wolken von Distant Horizons, falls installiert)

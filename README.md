@@ -17,21 +17,23 @@ Ein altes Pink-Galaxy-Ressourcenpaket sollte dabei deaktiviert sein, sonst liege
 
 ## Anpassen ohne Programmieren
 
-Die Einstellungen liegen in `src/main/resources/assets/nuit_chains/sky/`:
+Die Einstellungen liegen in `src/main/resources/assets/nuit_chains/sky/` (die Zahl vorne = Zeichenreihenfolge):
 
 | Datei | Inhalt |
 |---|---|
-| `01_pink_galaxy.json` | Hintergrund-Himmel |
-| `02_haze_low.json` / `03_haze_high.json` | Zwei langsam treibende Nebel-Schichten (`speed` = Tempo, negativ = andere Richtung) |
-| `04_clouds.json` | Düstere Wolkenbänke mit pink angestrahlten Rändern (treiben ganz langsam) |
-| `05_lightning.json` | Blitze |
-| `06_chains.json` | Ketten: Anzahl, Höhe, Größe, Bewegung, Schäden |
+| `01_pink_galaxy.json` | Hintergrund-Himmel (Nebel, Galaxie-Band, große Sterne) |
+| `02_stars.json` | Funkelnde Sterne, kurzes Aufblitzen, Sternschnuppen |
+| `03_haze_low.json` / `04_haze_high.json` | Zwei treibende Nebel-Schichten (`speed` = Tempo, 1 = eine Runde in 20 Minuten, negativ = andere Richtung) |
+| `05_clouds.json` | Düstere Wolkenbänke mit pink angestrahlten Rändern, ziehen langsam vorbei (`speed`) |
+| `06_wisps.json` | Dünne Wolkenfetzen davor, ziehen schneller – gibt Tiefe |
+| `07_lightning.json` | Blitze |
+| `08_chains.json` | Ketten: Anzahl, Höhe, Größe, Bewegung, Schäden |
 
 Eine Ebene ausschalten: Datei per eigenem Ressourcenpaket überschreiben und `"conditions": { "skyboxes": { "entries": ["minecraft:none"] } }` setzen.
 
 Mit einem eigenen Ressourcenpaket lassen sich diese Dateien auch überschreiben, und zwar unter demselben Pfad `assets/nuit_chains/sky/…`.
 
-Wichtige Werte in `06_chains.json` → `chains`:
+Wichtige Werte in `08_chains.json` → `chains`:
 
 | Wert | Bedeutung | Standard |
 |---|---|---|
@@ -72,7 +74,18 @@ Weitere Schalter: `hideClouds` (Vanilla-Wolken **und** die LOD-Wolken von Distan
 
 `glow` = Stärke des Leuchtens um die Ketten (0 = aus, Standard 0.45; leuchtet bei Blitzen kurz mit auf). `tint` färbt die Ketten ein, z. B. `{ "red": 1, "green": 0.6, "blue": 0.9 }`.
 
-### Blitze (`05_lightning.json` → `lightning`)
+### Sterne (`02_stars.json` → `stars`)
+
+| Wert | Bedeutung | Standard |
+|---|---|---|
+| `count` | Anzahl der Sterne (die meisten ganz schwach) | 2200 |
+| `brightness` / `size` | Helligkeit / Größe aller Sterne | 1 / 1 |
+| `twinkle` / `twinkleSpeed` | Wie stark und wie schnell sie funkeln (0 = gar nicht) | 0.7 / 1 |
+| `flares` | Wie oft einzelne Sterne kurz hell aufblitzen (0 = nie) | 1 |
+| `shootingStarInterval` | Sekunden zwischen Sternschnuppen im Schnitt (0 = keine) | 24 |
+| `bigStarPulse` | Wie stark die zwei großen Sterne langsam pulsieren und glitzern | 1 |
+
+### Blitze (`07_lightning.json` → `lightning`)
 
 | Wert | Bedeutung | Standard |
 |---|---|---|

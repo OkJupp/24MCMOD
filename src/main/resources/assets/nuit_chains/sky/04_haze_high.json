@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
   "type": "square-textured",
-  "texture": "nuit_chains:sky/clouds.png",
+  "texture": "nuit_chains:sky/haze_high.png",
   "properties": {
     "layer": 4,
     "clock": "game_time",
     "rotation": {
       "skyboxRotation": true,
-      "speed": 0.15,
+      "speed": -0.9,
       "axis": { "0": [0.0, 0.0, 0.0] }
     }
   },

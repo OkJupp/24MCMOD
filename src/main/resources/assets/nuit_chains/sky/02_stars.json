@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "type": "nuit_chains:stars",
+  "stars": {
+    "count": 2200,
+    "brightness": 1.0,
+    "size": 1.0,
+    "twinkle": 0.7,
+    "twinkleSpeed": 1.0,
+    "flares": 1.0,
+    "shootingStarInterval": 24,
+    "bigStarPulse": 1.0,
+    "seed": 7
+  },
+  "properties": {
+    "layer": 2
+  },
+  "conditions": {
+    "skyboxes": {
+      "entries": [
+        "minecraft:overworld"
+      ]
+    }
+  }
+}

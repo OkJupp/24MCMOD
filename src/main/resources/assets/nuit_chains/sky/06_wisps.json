@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "type": "square-textured",
+  "texture": "nuit_chains:sky/wisps.png",
+  "properties": {
+    "layer": 6,
+    "clock": "game_time",
+    "rotation": {
+      "skyboxRotation": true,
+      "speed": 1.6,
+      "axis": {
+        "0": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    }
+  },
+  "conditions": {
+    "skyboxes": {
+      "entries": [
+        "minecraft:overworld"
+      ]
+    }
+  }
+}

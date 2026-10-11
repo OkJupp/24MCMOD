@@ -3,11 +3,11 @@
   "type": "square-textured",
   "texture": "nuit_chains:sky/haze_low.png",
   "properties": {
-    "layer": 2,
+    "layer": 3,
     "clock": "game_time",
     "rotation": {
       "skyboxRotation": true,
-      "speed": 1.0,
+      "speed": 1.4,
       "axis": { "0": [0.0, 0.0, 0.0] }
     }
   },
