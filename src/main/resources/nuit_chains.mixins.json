@@ -4,7 +4,8 @@
   "package": "de.jupp.nuitchains.mixin",
   "compatibilityLevel": "JAVA_25",
   "client": [
-    "RenderTypeAccessor"
+    "RenderTypeAccessor",
+    "HudMixin"
   ],
   "injectors": {
     "defaultRequire": 1

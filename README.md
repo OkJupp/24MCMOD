@@ -86,6 +86,12 @@ Weitere Schalter: `hideClouds` (Vanilla-Wolken **und** die LOD-Wolken von Distan
 
 `color` färbt die Blitze.
 
+## Pinkes HUD
+
+Hotbar, Auswahl-Rahmen, Nebenhand, Herzen, Rüstung, Essen und XP-Leiste sind pink und animiert: Energie läuft um die Slot-Rahmen, Adern knistern, über Herzen und Rüstung wischt ab und zu ein Glanzlicht, die XP-Leiste hat wandernde Streifen, die Level-Zahl pulsiert pink.
+
+Das HUD ist ein eingebautes Ressourcenpaket **„Pinkes HUD (Nuit Chains)“** – standardmäßig an, unter *Optionen → Ressourcenpakete* abschaltbar. Die Grafiken erzeugt `tools/gen_hud.py` (Farben und Animation stehen oben im Skript).
+
 ## Neue Effekte hinzufügen
 
 1. Eine neue Klasse nach dem Vorbild von `ChainSkybox.java` anlegen. Sie erbt von Nuits `AbstractSkybox`, braucht einen `CODEC` und eine `render()`-Methode.
